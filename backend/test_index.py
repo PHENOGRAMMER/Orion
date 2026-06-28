@@ -11,6 +11,14 @@ builder = ProjectIndexBuilder()
 
 index = builder.build(scan_result)
 
+print("\nDependency Graph")
+
+for file, node in scan_result.dependency_graph.nodes.items():
+    print(f"\n{file}")
+
+    for imp in node.imports:
+        print(f"   -> {imp}")
+
 print(scan_result.git_statistics)
 print(scan_result.statistics)
 print(scan_result.framework_statistics)

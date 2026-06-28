@@ -95,6 +95,13 @@ class GitStatistics(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class DependencyModel(BaseModel):
+    file: str
+    imports: list[str] = Field(default_factory=list)
+
+class DependencyGraph(BaseModel):
+    nodes: dict[str, DependencyModel] = Field(default_factory=dict)
+
 class ProjectScanResult(BaseModel):
 
     project_id: str
@@ -115,6 +122,10 @@ class ProjectScanResult(BaseModel):
 
     git_statistics: GitStatistics = Field(
         default_factory=GitStatistics
+    )
+    
+    dependency_graph: DependencyGraph = Field(
+    default_factory=DependencyGraph
     )
 
     files: list[FileInfo] = Field(default_factory=list)

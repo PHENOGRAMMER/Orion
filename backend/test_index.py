@@ -11,6 +11,7 @@ builder = ProjectIndexBuilder()
 
 index = builder.build(scan_result)
 
+print(scan_result.git_statistics)
 print(scan_result.statistics)
 print(scan_result.framework_statistics)
 print(index.files_by_name.keys())

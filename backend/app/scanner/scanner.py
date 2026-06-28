@@ -5,6 +5,7 @@ from app.scanner.index_builder import ProjectIndexBuilder
 from app.scanner.language_detector import LanguageDetector
 from app.scanner.models import ProjectScanResult
 from app.scanner.framework_detector import FrameworkDetector
+from app.scanner.git_detector import GitDetector
 
 
 class ProjectScanner:
@@ -18,6 +19,8 @@ class ProjectScanner:
         self.language_detector = LanguageDetector()
 
         self.framework_detector = FrameworkDetector()
+
+        self.git_detector = GitDetector()
 
     def scan(
             self,
@@ -34,6 +37,7 @@ class ProjectScanner:
 
         result = self.language_detector.analyze(result)
         result = self.framework_detector.analyze(result, index)
+        result = self.git_detector.analyze(result)
 
         # FrameworkDetector(index)
         # GitDetector(index)

@@ -63,6 +63,38 @@ class LanguageStatistics(BaseModel):
     languages: dict[str, int] = Field(default_factory=dict)
 
 
+class GitStatistics(BaseModel):
+    """
+    Git repository information.
+    """
+
+    is_git_repository: bool = False
+
+    repository_root: str | None = None
+
+    current_branch: str | None = None
+
+    default_branch: str | None = None
+
+    remotes: list[str] = Field(default_factory=list)
+
+    last_commit_hash: str | None = None
+
+    last_commit_author: str | None = None
+
+    last_commit_email: str | None = None
+
+    last_commit_date: datetime | None = None
+
+    total_commits: int = 0
+
+    dirty: bool = False
+
+    untracked_files: list[str] = Field(default_factory=list)
+
+    tags: list[str] = Field(default_factory=list)
+
+
 class ProjectScanResult(BaseModel):
 
     project_id: str
@@ -81,4 +113,10 @@ class ProjectScanResult(BaseModel):
         default_factory=FrameworkStatistics
     )
 
+    git_statistics: GitStatistics = Field(
+        default_factory=GitStatistics
+    )
+
     files: list[FileInfo] = Field(default_factory=list)
+
+

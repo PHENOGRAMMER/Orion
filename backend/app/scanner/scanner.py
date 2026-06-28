@@ -1,8 +1,10 @@
 from pathlib import Path
 
 from app.scanner.filesystem import FileSystemScanner
+from app.scanner.index_builder import ProjectIndexBuilder
 from app.scanner.language_detector import LanguageDetector
 from app.scanner.models import ProjectScanResult
+from app.scanner.framework_detector import FrameworkDetector
 
 
 class ProjectScanner:
@@ -11,20 +13,30 @@ class ProjectScanner:
 
         self.filesystem = FileSystemScanner()
 
+        self.index_builder = ProjectIndexBuilder()
+
         self.language_detector = LanguageDetector()
 
+        self.framework_detector = FrameworkDetector()
+
     def scan(
-        self,
-        path: str | Path,
-        include_files: bool = True,
-        time_zone: str = "GMT",
+            self,
+            path: str | Path,
+            include_files: bool = True,
         ) -> ProjectScanResult:
 
         result = self.filesystem.scan(
-                str(path),
-                include_files=include_files,
-                time_zone=time_zone,
-            )
-        result = self.language_detector.analyze(result)
+            str(path),
+            include_files=include_files,
+        )
 
-        return result
+        index = self.index_builder.build(result)
+
+        result = self.language_detector.analyze(result)
+        result = self.framework_detector.analyze(result, index)
+
+        # FrameworkDetector(index)
+        # GitDetector(index)
+        # DependencyDetector(index)
+
+        return result, index

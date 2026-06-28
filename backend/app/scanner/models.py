@@ -27,6 +27,21 @@ class ProjectStatistics(BaseModel):
 
     extensions: dict[str, int] = Field(default_factory=dict)
 
+class FrameworkStatistics(BaseModel):
+    """
+    Framework statistics detected in the project.
+    """
+    frameworks: dict[str, bool] = Field(default_factory=dict)
+
+    package_managers: str | None = None
+
+    build_systems: str | None = None
+
+    containerization: list[str] = Field(default_factory=list)
+
+    ci_cd: list[str] = Field(default_factory=list)
+
+
 
 class DirectoryScanResult(BaseModel):
     """
@@ -60,6 +75,10 @@ class ProjectScanResult(BaseModel):
 
     language_statistics: LanguageStatistics = Field(
         default_factory=LanguageStatistics
+    )
+    
+    framework_statistics: FrameworkStatistics = Field(
+        default_factory=FrameworkStatistics
     )
 
     files: list[FileInfo] = Field(default_factory=list)

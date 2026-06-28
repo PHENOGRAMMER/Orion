@@ -102,6 +102,71 @@ class DependencyModel(BaseModel):
 class DependencyGraph(BaseModel):
     nodes: dict[str, DependencyModel] = Field(default_factory=dict)
 
+
+class MethodSymbol(BaseModel):
+
+    name: str
+    line: int
+    end_line: int
+    async_method: bool = False
+    decorators: list[str] = Field(default_factory=list)
+    docstring: str | None = None
+
+
+class FunctionSymbol(BaseModel):
+
+    name: str
+    line: int
+    end_line: int
+    decorators: list[str] = Field(default_factory=list)
+    async_function: bool = False
+    docstring: str | None = None
+
+
+class ClassSymbol(BaseModel):
+
+    name: str
+    line: int
+    end_line: int
+    decorators: list[str] = Field(default_factory=list)
+    base_classes: list[str] = Field(default_factory=list)
+    docstring: str | None = None
+    methods: list[MethodSymbol] = Field(default_factory=list)
+
+
+class VariableSymbol(BaseModel):
+
+    name: str
+    line: int
+
+class ImportSymbol(BaseModel):
+    """
+    Represents a single import statement.
+    """
+    module: str
+
+    name: str | None = None
+    alias: str | None = None
+    relative_level: int = 0
+
+    resolved_file: str | None = None
+    resolved_symbol: str | None = None
+
+
+class FileSymbols(BaseModel):
+
+    path: str = ""
+    language: str = "Python"
+    imports: list[ImportSymbol] = Field(default_factory=list)
+    classes: list[ClassSymbol] = Field(default_factory=list)
+    functions: list[FunctionSymbol] = Field(default_factory=list)
+    variables: list[VariableSymbol] = Field(default_factory=list)
+
+class SymbolGraph(BaseModel):
+    files: dict[str, FileSymbols] = Field(default_factory=dict)
+
+
+
 class ProjectScanResult(BaseModel):
 
     project_id: str
@@ -123,9 +188,13 @@ class ProjectScanResult(BaseModel):
     git_statistics: GitStatistics = Field(
         default_factory=GitStatistics
     )
-    
+
     dependency_graph: DependencyGraph = Field(
     default_factory=DependencyGraph
+    )
+
+    symbol_graph: SymbolGraph = Field(
+    default_factory=SymbolGraph
     )
 
     files: list[FileInfo] = Field(default_factory=list)

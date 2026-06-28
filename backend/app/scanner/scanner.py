@@ -7,6 +7,7 @@ from app.scanner.models import ProjectScanResult
 from app.scanner.framework_detector import FrameworkDetector
 from app.scanner.git_detector import GitDetector
 from app.scanner.dependency_detector import DependencyDetector
+from app.scanner.symbol_detector import SymbolDetector
 
 
 class ProjectScanner:
@@ -25,6 +26,8 @@ class ProjectScanner:
 
         self.dependency_detector = DependencyDetector()
 
+        self.symbol_detector = SymbolDetector()
+
     def scan(
             self,
             path: str | Path,
@@ -42,6 +45,7 @@ class ProjectScanner:
         result = self.framework_detector.analyze(result, index)
         result = self.git_detector.analyze(result)
         result = self.dependency_detector.analyze(result, index)
+        result = self.symbol_detector.analyze(result, index)
 
         # FrameworkDetector(index)
         # GitDetector(index)

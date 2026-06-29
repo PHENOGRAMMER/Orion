@@ -6,7 +6,9 @@ Provides fast lookups over scanned project files.
 
 from dataclasses import dataclass, field
 
-from app.scanner.models import FileInfo
+from app.scanner.models import FileInfo, SourceRoot
+
+from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -34,3 +36,7 @@ class ProjectIndex:
 
     # extension -> cumulative file size in bytes
     total_size_by_extension: dict[str, int] = field(default_factory=dict)
+
+    module_index: dict[str, Path] = field(default_factory=dict)
+
+    source_roots: list[SourceRoot] = field(default_factory=list)

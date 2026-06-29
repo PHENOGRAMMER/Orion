@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+from pathlib import Path
 
 class FileInfo(BaseModel):
     path: str
@@ -41,7 +42,15 @@ class FrameworkStatistics(BaseModel):
 
     ci_cd: list[str] = Field(default_factory=list)
 
-
+class SourceRoot(BaseModel):
+    """
+    Represents a source root in the project.
+    """
+    path: Path
+    score: int
+    language: str | None = None
+    reason: list[str] = Field(default_factory=list)
+    
 
 class DirectoryScanResult(BaseModel):
     """
@@ -151,6 +160,7 @@ class ImportSymbol(BaseModel):
 
     resolved_file: str | None = None
     resolved_symbol: str | None = None
+    resolved_symbol_type: str | None = None
 
 
 class FileSymbols(BaseModel):
@@ -198,5 +208,3 @@ class ProjectScanResult(BaseModel):
     )
 
     files: list[FileInfo] = Field(default_factory=list)
-
-

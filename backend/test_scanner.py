@@ -2,7 +2,7 @@ from app.scanner.scanner import ProjectScanner
 
 scanner = ProjectScanner()
 
-result = scanner.scan(
+result, index = scanner.scan(
     r"C:\\Users\\cools\\OneDrive\\Desktop\\Orion",
     time_zone="GMT",
 )

@@ -1,8 +1,12 @@
+from pathlib import Path
+
 from app.scanner.scanner import ProjectScanner
 
 scanner = ProjectScanner()
 
-scan_result, _ = scanner.scan("../Orion")
+repo_root = Path(__file__).resolve().parents[1]
+
+scan_result, _ = scanner.scan(repo_root)
 
 for file, symbols in scan_result.symbol_graph.files.items():
 

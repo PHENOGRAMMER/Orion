@@ -42,15 +42,6 @@ class FrameworkStatistics(BaseModel):
 
     ci_cd: list[str] = Field(default_factory=list)
 
-class SourceRoot(BaseModel):
-    """
-    Represents a source root in the project.
-    """
-    path: Path
-    score: int
-    language: str | None = None
-    reason: list[str] = Field(default_factory=list)
-    
 
 class DirectoryScanResult(BaseModel):
     """

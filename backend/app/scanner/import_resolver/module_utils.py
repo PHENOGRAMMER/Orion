@@ -4,7 +4,7 @@ into importable module names.
 """
 
 from pathlib import Path
-from app.scanner.models import SourceRoot
+from app.scanner.source_detector.models import SourceRoot
 
 class ModuleNameBuilder:
     """

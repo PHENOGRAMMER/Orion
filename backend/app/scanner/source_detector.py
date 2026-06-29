@@ -1,21 +1,20 @@
 """
 Project source root detector.
 
-Detects probable source roots for any software project.
-
-The detector is heuristic-based and language-agnostic.
+Detects probable source roots for software projects using
+language-agnostic heuristics.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from app.scanner.models import SourceRoot
+from app.scanner.source_detector.models import SourceRoot
 
 
 class SourceRootDetector:
     """
-    Detect likely source roots inside a repository.
+    Detect likely source roots.
     """
 
     IGNORE_DIRS = {
@@ -27,34 +26,13 @@ class SourceRootDetector:
         "dist",
         "build",
         "target",
-        "out",
         "coverage",
         ".idea",
         ".vscode",
+        ".cache",
         ".pytest_cache",
         ".mypy_cache",
         ".ruff_cache",
-        ".tox",
-        ".cache",
-        ".next",
-        ".nuxt",
-        ".gradle",
-    }
-
-    PROJECT_FILES = {
-        "pyproject.toml",
-        "requirements.txt",
-        "package.json",
-        "Cargo.toml",
-        "go.mod",
-        "pom.xml",
-        "build.gradle",
-        "build.gradle.kts",
-        "settings.gradle",
-        "settings.gradle.kts",
-        "composer.json",
-        "CMakeLists.txt",
-        "Makefile",
     }
 
     COMMON_SOURCE_NAMES = {
@@ -66,12 +44,25 @@ class SourceRootDetector:
         "client",
         "core",
         "engine",
+        "api",
+        "pkg",
         "lib",
         "libs",
-        "pkg",
-        "packages",
-        "services",
-        "api",
+    }
+
+    PROJECT_FILES = {
+        "requirements.txt",
+        "pyproject.toml",
+        "package.json",
+        "Cargo.toml",
+        "go.mod",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "composer.json",
+        "CMakeLists.txt",
+        "Makefile",
     }
 
     EXTENSION_LANGUAGE = {
@@ -82,81 +73,60 @@ class SourceRootDetector:
         ".tsx": "TypeScript",
         ".java": "Java",
         ".kt": "Kotlin",
-        ".kts": "Kotlin",
         ".go": "Go",
         ".rs": "Rust",
         ".cpp": "C/C++",
         ".cc": "C/C++",
-        ".cxx": "C/C++",
         ".c": "C/C++",
-        ".h": "C/C++",
         ".hpp": "C/C++",
+        ".h": "C/C++",
         ".cs": "C#",
         ".swift": "Swift",
         ".php": "PHP",
         ".rb": "Ruby",
     }
 
-    SOURCE_EXTENSIONS = set(EXTENSION_LANGUAGE.keys())
-
     def detect(
         self,
         project_root: Path,
     ) -> list[SourceRoot]:
-        """
-        Detect probable source roots.
-        """
 
         project_root = project_root.resolve()
 
         candidates: list[SourceRoot] = []
 
-        for directory in project_root.rglob("*"):
+        #
+        # Always evaluate the project root
+        #
 
-            if not directory.is_dir():
-                continue
+        directories = [project_root]
+
+        directories.extend(
+            d
+            for d in project_root.rglob("*")
+            if d.is_dir()
+        )
+
+        for directory in directories:
 
             if self._should_ignore(directory):
                 continue
 
-            score, reasons, language = self._score_directory(directory)
+            root = self._evaluate(directory)
 
-            if score >= 30:
-
-                candidates.append(
-                    SourceRoot(
-                        path=directory,
-                        score=score,
-                        reason=reasons,
-                        language=language,
-                    )
-                )
-
-        #
-        # Fallback
-        #
-
-        if not candidates:
-
-            return [
-                SourceRoot(
-                    path=project_root,
-                    score=1,
-                    reason=["fallback"],
-                    language=None,
-                )
-            ]
+            if root.score >= 30:
+                candidates.append(root)
 
         #
         # Highest score first
         #
 
         candidates.sort(
-            key=lambda root: (-root.score, len(root.path.parts))
+            key=lambda x: (-x.score, len(x.path.parts))
         )
 
         #
-        # Remove nested roots
+        # Remove nested duplicates
         #
 
         filtered: list[SourceRoot] = []
@@ -171,110 +141,144 @@ class SourceRootDetector:
 
             filtered.append(candidate)
 
+        if not filtered:
+
+            return [
+                SourceRoot(
+                    path=project_root,
+                    score=1,
+                    language=None,
+                    reason=["fallback"],
+                )
+            ]
+
         return filtered
 
-    def _score_directory(
+    def _evaluate(
         self,
         directory: Path,
-    ) -> tuple[int, list[str], str | None]:
+    ) -> SourceRoot:
 
         score = 0
-        reasons: list[str] = []
 
-        language_counts: dict[str, int] = {}
+        reasons: set[str] = set()
 
         #
-        # Common names
+        # Directory name
         #
 
         if directory.name.lower() in self.COMMON_SOURCE_NAMES:
 
             score += 30
 
-            reasons.append(
+            reasons.add(
                 f"directory named '{directory.name}'"
             )
 
-        source_files = 0
-
-        scanned = 0
-        max_scan = 500
-
-        try:
-
-            for child in directory.rglob("*"):
-
-                if scanned >= max_scan:
-                    break
-
-                scanned += 1
-
-                if child.is_dir():
-
-                    if self._should_ignore(child):
-                        continue
-
-                    continue
-
-                #
-                # Project files
-                #
-
-                if child.name in self.PROJECT_FILES:
-
-                    score += 50
-
-                    reasons.append(
-                        f"contains {child.name}"
-                    )
-
-                #
-                # Source files
-                #
-
-                suffix = child.suffix.lower()
-
-                if suffix not in self.SOURCE_EXTENSIONS:
-                    continue
-
-                source_files += 1
-
-                language = self.EXTENSION_LANGUAGE[suffix]
-
-                language_counts.setdefault(language, 0)
-
-                language_counts[language] += 1
-
-        except PermissionError:
-
-            return 0, [], None
-
         #
-        # Source file score
+        # Direct children only
         #
 
-        score += min(source_files * 2, 50)
+        source_files, languages = self._count_source_files(
+            directory,
+        )
 
-        if source_files >= 10:
+        for child in directory.iterdir():
 
-            score += 20
+            if child.is_dir():
+
+                if child.name in self.IGNORE_DIRS:
+                    continue
+
+                continue
+
+            #
+            # Project files
+            #
+
+            if child.name in self.PROJECT_FILES:
+
+                score += 40
+
+                reasons.add(
+                    f"contains {child.name}"
+                )
+
+        #
+        # Source files
+        #
 
         if source_files:
 
-            reasons.append(
-                f"contains {source_files} source files"
+            score += min(
+                source_files * 3,
+                30,
             )
+
+            if source_files == 1:
+
+                reasons.add(
+                    "contains 1 source file"
+                )
+
+            else:
+
+                reasons.add(
+                    f"contains {source_files} source files"
+                )
+
+        #
+        # Common project structure
+        #
+
+        subdirs = {
+            d.name.lower()
+            for d in directory.iterdir()
+            if d.is_dir()
+        }
+
+        important = {
+            "models",
+            "routes",
+            "controllers",
+            "services",
+            "views",
+            "tests",
+        }
+
+        shared = subdirs & important
+
+        if shared:
+
+            score += min(
+                len(shared) * 5,
+                20,
+            )
+
+            reasons.add(
+                "contains common source directories"
+            )
+
+        #
+        # Dominant language
+        #
 
         dominant_language = None
 
-        if language_counts:
+        if languages:
 
             dominant_language = max(
-                language_counts,
-                key=language_counts.get,
+                languages,
+                key=languages.get,
             )
 
-        return score, reasons, dominant_language
+        return SourceRoot(
+            path=directory,
+            score=score,
+            language=dominant_language,
+            language_counts=languages,
+            reasons=sorted(reasons),
+        )
 
     def _should_ignore(
         self,
@@ -285,3 +289,36 @@ class SourceRootDetector:
             part in self.IGNORE_DIRS
             for part in directory.parts
         )
+
+    def _count_source_files(
+        self,
+        directory: Path,
+    ) -> tuple[int, dict[str, int]]:
+
+        count = 0
+
+        languages: dict[str, int] = {}
+
+        for file in directory.rglob("*"):
+
+            if any(
+                part in self.IGNORE_DIRS
+                for part in file.parts
+            ):
+                continue
+
+            if not file.is_file():
+                continue
+
+            suffix = file.suffix.lower()
+
+            language = self.EXTENSION_LANGUAGE.get(suffix)
+
+            if not language:
+                continue
+
+            count += 1
+
+            languages[language] = languages.get(language, 0) + 1
+
+        return count, languages

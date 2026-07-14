@@ -6,7 +6,8 @@ Provides fast lookups over scanned project files.
 
 from dataclasses import dataclass, field
 
-from app.scanner.models import FileInfo, SourceRoot
+from app.scanner.models import FileInfo
+from app.scanner.source_detector.models import SourceRoot
 
 from pathlib import Path
 

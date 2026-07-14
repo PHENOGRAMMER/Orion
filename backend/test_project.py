@@ -99,9 +99,9 @@ def main() -> None:
         print(f"  Score     : {root.score}")
         print(f"  Language  : {root.language}")
 
-        if root.reason:
+        if root.reasons:
             print("  Reasons:")
-            for reason in root.reason:
+            for reason in root.reasons:
                 print(f"    - {reason}")
 
     #

@@ -1,89 +1,103 @@
 """
-Symbol resolver.
+Symbol Resolver.
 
-Resolves imported names to project symbols.
+Resolves imported symbols using the project's SymbolIndex.
 """
 
 from __future__ import annotations
 
-from app.scanner.models import (
-    ImportSymbol,
-    ProjectScanResult,
-)
+from app.scanner.models import ImportSymbol
+from app.scanner.symbol_index import SymbolIndex
+
+from .models import SymbolResolution
 
 
 class SymbolResolver:
     """
-    Resolve imported symbols after modules have been resolved.
+    Resolves imported symbols after module resolution.
     """
 
     def resolve(
         self,
-        result: ProjectScanResult,
-    ) -> ProjectScanResult:
-
-        for file_symbols in result.symbol_graph.files.values():
-
-            for import_symbol in file_symbols.imports:
-
-                self._resolve_import(
-                    import_symbol,
-                    result,
-                )
-
-        return result
-
-    def _resolve_import(
-        self,
+        *,
         import_symbol: ImportSymbol,
-        result: ProjectScanResult,
-    ) -> None:
+        symbol_index: SymbolIndex,
+    ) -> SymbolResolution:
+        """
+        Resolve a single imported symbol.
+        """
 
-        if (
-            import_symbol.resolved_file is None
-            or import_symbol.name is None
-        ):
-            return
+        #
+        # Only "from x import y" imports have symbols.
+        #
 
-        target = result.symbol_graph.files.get(
-            import_symbol.resolved_file.as_posix()
+        if import_symbol.name is None:
+
+            return SymbolResolution(
+                module=import_symbol.module,
+                symbol="",
+                resolved=False,
+            )
+
+        #
+        # Prefer the module resolved by ModuleResolver.
+        #
+
+        module_name = import_symbol.module
+
+        if getattr(import_symbol, "resolved_module", None):
+
+            resolved = import_symbol.resolved_module
+
+            if hasattr(resolved, "name"):
+
+                module_name = resolved.name
+
+            else:
+
+                module_name = str(resolved)
+
+        if module_name is None:
+
+            return SymbolResolution(
+                module="",
+                symbol=import_symbol.name,
+                resolved=False,
+            )
+
+        qualified_name = f"{module_name}.{import_symbol.name}"
+
+        symbol = symbol_index.lookup_qualified(
+            qualified_name,
         )
 
-        if target is None:
-            return
+        if symbol is None:
+
+            return SymbolResolution(
+                module=module_name,
+                symbol=import_symbol.name,
+                resolved=False,
+            )
 
         #
-        # Classes
+        # Populate ImportSymbol.
         #
 
-        for cls in target.classes:
+        import_symbol.resolved_file = symbol.path.as_posix()
 
-            if cls.name == import_symbol.name:
+        import_symbol.resolved_symbol = symbol.name
 
-                import_symbol.resolved_symbol = cls.name
-                import_symbol.resolved_symbol_type = "class"
-                return
+        import_symbol.resolved_symbol_type = symbol.symbol_type
 
         #
-        # Functions
+        # Return resolution.
         #
 
-        for fn in target.functions:
-
-            if fn.name == import_symbol.name:
-
-                import_symbol.resolved_symbol = fn.name
-                import_symbol.resolved_symbol_type = "function"
-                return
-
-        #
-        # Variables
-        #
-
-        for var in target.variables:
-
-            if var.name == import_symbol.name:
-
-                import_symbol.resolved_symbol = var.name
-                import_symbol.resolved_symbol_type = "variable"
-                return
+        return SymbolResolution(
+            module=module_name,
+            symbol=symbol.name,
+            resolved=True,
+            file=symbol.path,
+            symbol_type=symbol.symbol_type,
+            line=symbol.line,
+        )

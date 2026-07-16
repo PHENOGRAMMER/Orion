@@ -1,7 +1,7 @@
 """
-Module resolver.
+Module Resolver.
 
-Resolves imported Python modules to files inside the project.
+Resolves ImportSymbol.module to a project file.
 """
 
 from __future__ import annotations
@@ -9,84 +9,92 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.scanner.index import ProjectIndex
-from app.scanner.models import (
-    ImportSymbol,
-    ProjectScanResult,
+from app.scanner.models import ImportSymbol
+
+from .models import ModuleResolution
+from .utils import (
+    lookup_module,
+    module_exists,
+    resolve_relative_module,
 )
 
 
 class ModuleResolver:
     """
-    Resolves imported modules using the project's module index.
-
-    Example
-    -------
-    app.scanner.models
-
-        ↓
-
-    backend/app/scanner/models.py
+    Resolves imported modules using the project module index.
     """
 
     def resolve(
         self,
-        result: ProjectScanResult,
-        index: ProjectIndex,
-    ) -> ProjectScanResult:
-
-        for file_symbols in result.symbol_graph.files.values():
-
-            for import_symbol in file_symbols.imports:
-
-                self._resolve_import(
-                    import_symbol,
-                    index,
-                )
-
-        return result
-
-    def _resolve_import(
-        self,
+        *,
+        current_module: str,
         import_symbol: ImportSymbol,
         index: ProjectIndex,
-    ) -> None:
+    ) -> ModuleResolution:
         """
         Resolve a single import.
+
+        Parameters
+        ----------
+        current_module:
+            Module containing the import.
+
+        import_symbol:
+            Parsed ImportSymbol.
+
+        index:
+            Project module index.
+
+        Returns
+        -------
+        ModuleResolution
         """
 
         #
-        # import pathlib
+        # Convert relative imports to absolute imports.
         #
 
-        if import_symbol.module in index.module_index:
+        module = resolve_relative_module(
+            current_module=current_module,
+            imported=import_symbol,
+        )
+
+        #
+        # Module not present in project.
+        #
+
+        if not module_exists(
+            module,
+            index,
+        ):
+
+            return ModuleResolution(
+                module=module,
+                resolved=False,
+            )
+
+        #
+        # Lookup module.
+        #
+
+        resolved_module = lookup_module(
+            module,
+            index,
+        )
+
+        #
+        # Update ImportSymbol.
+        #
+
+        if resolved_module is not None:
 
             import_symbol.resolved_file = (
-                index.module_index[import_symbol.module]
+                resolved_module.path.as_posix()
             )
 
-            return
-
-        #
-        # from app.scanner import models
-        #
-        # module = app.scanner
-        # name   = models
-        #
-
-        if import_symbol.name:
-
-            full_module = (
-                f"{import_symbol.module}.{import_symbol.name}"
-            )
-
-            if full_module in index.module_index:
-
-                import_symbol.resolved_file = (
-                    index.module_index[full_module]
-                )
-
-                return
-
-        #
-        # Relative imports are handled later.
-        #
+        return ModuleResolution(
+            module=module,
+            resolved=resolved_module is not None,
+            file=resolved_module.path if resolved_module else None,
+            resolved_module=resolved_module,
+        )

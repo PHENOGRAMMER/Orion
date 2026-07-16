@@ -8,6 +8,7 @@ from app.scanner.import_resolver.module_utils import ModuleNameBuilder
 from app.scanner.index import ProjectIndex
 from app.scanner.models import FileInfo, ProjectScanResult
 from app.scanner.source_detector import SourceRootDetector
+from app.scanner.symbol_index_builder import SymbolIndexBuilder
 
 
 class ProjectIndexBuilder:
@@ -38,6 +39,7 @@ class ProjectIndexBuilder:
 
         self.module_builder = ModuleNameBuilder()
         self.source_detector = SourceRootDetector()
+        self.symbol_index_builder = SymbolIndexBuilder()
 
     def build(
         self,
@@ -67,6 +69,11 @@ class ProjectIndexBuilder:
                 file=file,
                 project_root=project_root,
             )
+
+        index.symbol_index = self.symbol_index_builder.build(
+            scan_result=scan_result,
+            module_index=index.module_index,
+        )
 
         return index
 
@@ -153,13 +160,11 @@ class ProjectIndexBuilder:
 
         if file.extension == ".py":
 
-            module_name = self.module_builder.build(
+            module = self.module_builder.build(
                 absolute_path,
                 index.source_roots,
             )
 
-            if module_name:
+            if module is not None:
 
-                index.module_index[module_name] = (
-                    relative_path
-                )
+                index.module_index[module.name] = module

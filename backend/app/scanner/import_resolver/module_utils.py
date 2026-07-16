@@ -1,32 +1,52 @@
 """
 Utilities for converting Python source files
-into importable module names.
+into importable module information.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
+
+from app.scanner.import_resolver.models import ModuleInfo
 from app.scanner.source_detector.models import SourceRoot
+
 
 class ModuleNameBuilder:
     """
-    Converts
+    Converts source files into ModuleInfo objects.
 
-        backend/app/scanner/models.py
+    Examples
+    --------
 
-    into
+    backend/app/scanner/models.py
 
-        app.scanner.models
+        ->
+        ModuleInfo(
+            name="app.scanner.models",
+            package="app.scanner",
+            is_package=False,
+        )
+
+    backend/app/scanner/source_detector/__init__.py
+
+        ->
+        ModuleInfo(
+            name="app.scanner.source_detector",
+            package="app.scanner.source_detector",
+            is_package=True,
+        )
     """
 
     def build(
         self,
         file_path: Path,
         source_roots: list[SourceRoot],
-    ) -> str:
+    ) -> ModuleInfo | None:
 
-        chosen_root = None
+        chosen_root: Path | None = None
 
         #
-        # Find the source root that owns this file
+        # Find the source root that owns this file.
         #
 
         for root in source_roots:
@@ -44,7 +64,11 @@ class ModuleNameBuilder:
                 continue
 
         if chosen_root is None:
-            return ""
+            return None
+
+        #
+        # Relative path from source root.
+        #
 
         relative = file_path.relative_to(chosen_root)
 
@@ -53,15 +77,48 @@ class ModuleNameBuilder:
         parts = list(relative.parts)
 
         #
-        # package/__init__.py
+        # Detect packages (__init__.py)
         #
-        # becomes
-        #
-        # package
-        #
+
+        is_package = False
 
         if parts and parts[-1] == "__init__":
 
+            is_package = True
+
             parts.pop()
 
-        return ".".join(parts)
+        #
+        # Full module name.
+        #
+
+        module_name = ".".join(parts)
+
+        #
+        # Package name.
+        #
+
+        if is_package:
+
+            #
+            # __init__.py represents the package itself.
+            #
+
+            package_name = module_name
+
+        else:
+
+            if "." in module_name:
+
+                package_name = module_name.rsplit(".", 1)[0]
+
+            else:
+
+                package_name = ""
+
+        return ModuleInfo(
+            name=module_name,
+            package=package_name,
+            path=file_path,
+            is_package=is_package,
+        )

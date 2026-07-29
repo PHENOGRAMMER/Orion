@@ -22,9 +22,7 @@ class ImportResolver:
     """
 
     def __init__(self) -> None:
-
         self.module_resolver = ModuleResolver()
-
         self.symbol_resolver = SymbolResolver()
 
     def resolve(
@@ -41,16 +39,13 @@ class ImportResolver:
             )
 
             if module is None:
+                print(f"[WARN] No module found for: {file_path}")
                 continue
-
-            #
-            # Resolve Modules.
-            #
 
             for import_symbol in file_symbols.imports:
 
                 self.module_resolver.resolve(
-                    current_module=module.name,
+                    current_module=module,
                     import_symbol=import_symbol,
                     index=index,
                 )
@@ -68,13 +63,29 @@ class ImportResolver:
         index: ProjectIndex,
     ) -> ModuleInfo | None:
         """
-        Convert a file path back into a module info.
+        Convert a file path back into ModuleInfo.
         """
+
+        # Normalize the incoming path.
+        try:
+            file_path = file_path.resolve(strict=False)
+        except Exception:
+            file_path = Path(file_path)
 
         for module in index.module_index.values():
 
-            if module.path == file_path:
+            module_path = module.path
 
+            try:
+                module_path = module_path.resolve(strict=False)
+            except Exception:
+                pass
+
+            if module_path == file_path:
+                return module
+
+            # Fallback for relative/absolute path mismatches.
+            if module.path.as_posix().endswith(file_path.as_posix()):
                 return module
 
         return None

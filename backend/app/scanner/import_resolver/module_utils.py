@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.scanner.import_resolver.models import ModuleInfo
 from app.scanner.source_detector.models import SourceRoot
+from app.scanner.index import ProjectIndex
 
 
 class ModuleNameBuilder:
@@ -122,3 +123,23 @@ class ModuleNameBuilder:
             path=file_path,
             is_package=is_package,
         )
+
+
+def normalize_import_path(
+    path: Path,
+    index: ProjectIndex,
+) -> str:
+    """
+    Normalizes an absolute path to the project-relative path
+    used for imports and graph references.
+    """
+    
+    file_name = path.name
+
+    for file_info in index.files_by_name.get(file_name, []):
+
+        if path.as_posix().endswith(file_info.path):
+
+            return file_info.path
+
+    return path.as_posix()

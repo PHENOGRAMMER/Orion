@@ -2,6 +2,7 @@
 Project index builder.
 """
 
+from app.scanner.knowledge_graph.builder import KnowledgeGraphBuilder
 from pathlib import Path
 
 from app.scanner.import_resolver.module_utils import ModuleNameBuilder
@@ -9,6 +10,7 @@ from app.scanner.index import ProjectIndex
 from app.scanner.models import FileInfo, ProjectScanResult
 from app.scanner.source_detector import SourceRootDetector
 from app.scanner.symbol_index_builder import SymbolIndexBuilder
+from app.scanner.knowledge_graph.builder import KnowledgeGraphBuilder
 
 
 class ProjectIndexBuilder:
@@ -40,6 +42,7 @@ class ProjectIndexBuilder:
         self.module_builder = ModuleNameBuilder()
         self.source_detector = SourceRootDetector()
         self.symbol_index_builder = SymbolIndexBuilder()
+        self.knowledge_graph_builder = KnowledgeGraphBuilder()
 
     def build(
         self,
@@ -69,11 +72,6 @@ class ProjectIndexBuilder:
                 file=file,
                 project_root=project_root,
             )
-
-        index.symbol_index = self.symbol_index_builder.build(
-            scan_result=scan_result,
-            module_index=index.module_index,
-        )
 
         return index
 

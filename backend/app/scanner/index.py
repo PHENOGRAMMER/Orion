@@ -10,6 +10,7 @@ from app.scanner.models import FileInfo
 from app.scanner.source_detector.models import SourceRoot
 from app.scanner.import_resolver.models import ModuleInfo
 from app.scanner.symbol_index import SymbolIndex
+from app.scanner.knowledge_graph.graph import KnowledgeGraph
 
 from pathlib import Path
 
@@ -45,3 +46,5 @@ class ProjectIndex:
     source_roots: list[SourceRoot] = field(default_factory=list)
 
     symbol_index: SymbolIndex = field(default_factory=SymbolIndex)
+
+    knowledge_graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)

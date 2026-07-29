@@ -1,100 +1,68 @@
 """
 Module Resolver.
 
-Resolves ImportSymbol.module to a project file.
+Resolves imported modules.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from app.scanner.index import ProjectIndex
 from app.scanner.models import ImportSymbol
 
-from .models import ModuleResolution
+from .models import ModuleInfo, ModuleResolution
 from .utils import (
     lookup_module,
     module_exists,
     resolve_relative_module,
 )
+from .module_utils import normalize_import_path
 
 
 class ModuleResolver:
     """
-    Resolves imported modules using the project module index.
+    Resolves imported modules.
     """
 
     def resolve(
         self,
-        *,
-        current_module: str,
+        current_module: ModuleInfo,
         import_symbol: ImportSymbol,
         index: ProjectIndex,
     ) -> ModuleResolution:
-        """
-        Resolve a single import.
-
-        Parameters
-        ----------
-        current_module:
-            Module containing the import.
-
-        import_symbol:
-            Parsed ImportSymbol.
-
-        index:
-            Project module index.
-
-        Returns
-        -------
-        ModuleResolution
-        """
-
-        #
-        # Convert relative imports to absolute imports.
-        #
 
         module = resolve_relative_module(
             current_module=current_module,
             imported=import_symbol,
         )
 
-        #
-        # Module not present in project.
-        #
-
-        if not module_exists(
-            module,
-            index,
-        ):
-
+        if not module_exists(module, index):
             return ModuleResolution(
                 module=module,
                 resolved=False,
             )
-
-        #
-        # Lookup module.
-        #
 
         resolved_module = lookup_module(
             module,
             index,
         )
 
-        #
-        # Update ImportSymbol.
-        #
-
-        if resolved_module is not None:
-
-            import_symbol.resolved_file = (
-                resolved_module.path.as_posix()
+        if resolved_module is None:
+            return ModuleResolution(
+                module=module,
+                resolved=False,
             )
+
+        import_symbol.resolved_module = resolved_module.name
+        
+        # Normalize the absolute path to a project-relative path
+        import_symbol.resolved_file = normalize_import_path(
+            resolved_module.path,
+            index,
+        )
 
         return ModuleResolution(
             module=module,
-            resolved=resolved_module is not None,
-            file=resolved_module.path if resolved_module else None,
+            resolved=True,
+            file=resolved_module.path,
             resolved_module=resolved_module,
         )

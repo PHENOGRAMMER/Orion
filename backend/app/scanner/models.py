@@ -150,6 +150,7 @@ class ImportSymbol(BaseModel):
     relative_level: int = 0
 
     resolved_file: str | None = None
+    resolved_module:str | None = None
     resolved_symbol: str | None = None
     resolved_symbol_type: str | None = None
 

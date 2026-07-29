@@ -1,3 +1,4 @@
+from app.scanner import index_builder
 from pathlib import Path
 
 from app.scanner.filesystem import FileSystemScanner
@@ -51,7 +52,20 @@ class ProjectScanner:
         result = self.git_detector.analyze(result)
         result = self.dependency_detector.analyze(result, index)
         result = self.symbol_detector.analyze(result, index)
+
+        index.symbol_index = self.index_builder.symbol_index_builder.build(
+            scan_result=result,
+            module_index=index.module_index,
+        )
+
+        # Resolve imports first
         result = self.import_resolver.resolve(result, index)
+
+        # Now build the graph using the resolved imports
+        index.knowledge_graph = self.index_builder.knowledge_graph_builder.build(
+            result=result,
+            index=index,
+        )
 
         # FrameworkDetector(index)
         # GitDetector(index)

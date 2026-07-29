@@ -30,6 +30,8 @@ class SymbolIndexBuilder:
 
         index = SymbolIndex()
 
+        project_root = Path(scan_result.root_path).resolve()
+
         path_to_module = {
             module.path: module.name
             for module in module_index.values()
@@ -37,7 +39,9 @@ class SymbolIndexBuilder:
 
         for file_path, file_symbols in scan_result.symbol_graph.files.items():
 
-            module_name = path_to_module.get(Path(file_path))
+            abs_path = (project_root / file_path).resolve()
+            
+            module_name = path_to_module.get(abs_path)
 
             if module_name is None:
                 continue

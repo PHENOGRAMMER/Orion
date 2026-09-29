@@ -17,6 +17,13 @@ import streamlit as st
 DEFAULT_API_URL = os.getenv("ORION_API_URL", "http://localhost:8000").rstrip("/")
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def auth0_is_configured() -> bool:
     """Enable Auth0 when explicitly requested or when secrets are present."""
     env_value = os.getenv("ORION_AUTH0_ENABLED")
@@ -37,6 +44,7 @@ def auth0_is_configured() -> bool:
 
 
 AUTH0_ENABLED = auth0_is_configured()
+LLM_ENABLED = env_bool("ORION_LLM_ENABLED", False)
 
 st.set_page_config(
     page_title="Orion Observatory",
@@ -387,19 +395,22 @@ with right:
         st.markdown("Select a symbol to bring its local graph into focus.")
 
 st.space("medium")
-st.subheader("Ask Orion")
-question_col, action_col = st.columns([4, 1])
-with question_col:
-    question = st.text_input("Question", placeholder="What calls this symbol, and what could a change affect?", label_visibility="collapsed")
-with action_col:
-    ask = st.button("Ask", width="stretch", disabled=not bool(selected and question.strip()))
+if LLM_ENABLED:
+    st.subheader("Ask Orion")
+    question_col, action_col = st.columns([4, 1])
+    with question_col:
+        question = st.text_input("Question", placeholder="What calls this symbol, and what could a change affect?", label_visibility="collapsed")
+    with action_col:
+        ask = st.button("Ask", width="stretch", disabled=not bool(selected and question.strip()))
 
-if ask and selected:
-    try:
-        answer = api_post("/llm/ask", {"question": question, "focal_symbol": selected})
-        st.markdown(answer.get("answer", "No answer returned."))
-        st.caption(f"{answer.get('device', 'unknown')} · {answer.get('latency_ms', 0)} ms")
-    except httpx.HTTPError as exc:
-        st.error(api_error_message(exc))
+    if ask and selected:
+        try:
+            answer = api_post("/llm/ask", {"question": question, "focal_symbol": selected})
+            st.markdown(answer.get("answer", "No answer returned."))
+            st.caption(f"{answer.get('device', 'unknown')} · {answer.get('latency_ms', 0)} ms")
+        except httpx.HTTPError as exc:
+            st.error(api_error_message(exc))
+else:
+    st.info("LLM analysis is disabled in this deployment. Graph scanning and relationship analysis remain available.")
 
 st.caption(f"Project: {stats.get('project_path') or 'No project loaded'}")

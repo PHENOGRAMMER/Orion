@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     ORION_IDENTITY_BRIDGE_SECRET: str | None = None
     ORION_IDENTITY_BRIDGE_MAX_AGE_SECONDS: int = 300
 
+    # Optional local LLM inference. Keep disabled for the lightweight
+    # deployment; enable only when the model runtime and adapter are present.
+    ORION_LLM_ENABLED: bool = False
+
     #
     # Optional bootstrap admin key.  When set, a key with this exact value
     # and admin role is auto-created on first startup so you always have a

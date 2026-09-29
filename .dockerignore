@@ -39,5 +39,5 @@ scratch
 test_repos
 orion-external-test
 
-# Keep fine_tuned_model available to the Dockerfile intentionally. It is a
-# deployment artifact and must be supplied separately from source control.
+# Fine-tuned model artifacts are intentionally excluded from this lightweight
+# image. Supply them separately only for an LLM-enabled deployment.

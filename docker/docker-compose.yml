@@ -15,6 +15,7 @@ services:
     environment:
       AUTH_ENABLED: "true"
       DEBUG: "false"
+      ORION_LLM_ENABLED: "false"
       # Set ADMIN_API_KEY once, then rotate to a proper key and remove this.
       # ADMIN_API_KEY: "ob_live_your_bootstrap_key_here"
       PERSISTENCE_DB: "/data/orion/orion.db"

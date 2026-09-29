@@ -48,24 +48,30 @@ from functools import lru_cache
 from threading import Thread
 from typing import Any, Iterator
 
-import torch
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from pathlib import Path as FilePath
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.auth import CurrentUser, User, require_admin
 from app.core import graph_state
+from app.core.config import settings
 
 from app.scanner.source_extractor import extract_symbol_source
 
 logger = logging.getLogger("orion.llm")
+
+try:
+    import torch
+except ImportError:  # The no-LLM deployment intentionally omits torch.
+    torch = None
 
 # ── Config ────────────────────────────────────────────────────────────────────
 MODEL_BASE     = os.getenv("ORION_BASE_MODEL",   "deepseek-ai/deepseek-coder-1.3b-instruct")
 ADAPTER_PATH   = os.getenv("ORION_ADAPTER_PATH", "../fine_tuned_model")
 MAX_NEW_TOKENS = int(os.getenv("ORION_MAX_TOKENS", "65"))
 TEMPERATURE    = 0.05
+LLM_ENABLED    = settings.ORION_LLM_ENABLED
 
 # ── STEP 2: ftfy import (graceful fallback if not installed) ──────────────────
 # Install with:  pip install ftfy
@@ -125,6 +131,11 @@ router = APIRouter(tags=["LLM"])
 
 @lru_cache(maxsize=1)
 def _load_model():
+    if not LLM_ENABLED:
+        raise RuntimeError("Orion LLM inference is disabled in this deployment")
+    if torch is None:
+        raise RuntimeError("Orion LLM dependencies are not installed")
+
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from peft import PeftModel
 
@@ -815,6 +826,9 @@ async def ask(req: AskRequest, request: Request, _user: CurrentUser = None):
             "focal_symbol": "shop.calculate_total"
         }
     """
+    if not LLM_ENABLED:
+        raise HTTPException(status_code=503, detail="The Orion LLM feature is disabled for this deployment.")
+
     graph   = _get_graph(request)
     query   = _get_query(request)
     context = _build_context(
@@ -870,6 +884,9 @@ async def ask(req: AskRequest, request: Request, _user: CurrentUser = None):
 @router.post("/stream")
 async def stream(req: AskRequest, request: Request, _user: CurrentUser = None):
     """Stream tokens as they are generated — useful for a typing effect in the UI."""
+    if not LLM_ENABLED:
+        raise HTTPException(status_code=503, detail="The Orion LLM feature is disabled for this deployment.")
+
     graph   = _get_graph(request)
     query   = _get_query(request)
     context = _build_context(
@@ -900,11 +917,12 @@ async def stream(req: AskRequest, request: Request, _user: CurrentUser = None):
 
 @router.get("/health")
 async def health(request: Request, _user: CurrentUser = None):
-    cuda       = torch.cuda.is_available()
+    cuda       = bool(torch is not None and torch.cuda.is_available())
     cache_info = _load_model.cache_info()
 
     info: dict[str, Any] = {
         "model_loaded":   cache_info.currsize > 0,
+        "enabled":        LLM_ENABLED,
         "device":         "cuda" if cuda else "cpu",
         "cuda_available": cuda,
         "max_new_tokens": MAX_NEW_TOKENS,
@@ -921,7 +939,7 @@ async def health(request: Request, _user: CurrentUser = None):
             else f"WARNING — low IDs detected: {[i for i in stop_ids if i < 100]} — restart uvicorn"
         )
 
-    if cuda:
+    if cuda and torch is not None:
         info["vram"] = [
             {
                 "gpu":      i,
@@ -931,7 +949,7 @@ async def health(request: Request, _user: CurrentUser = None):
             for i in range(torch.cuda.device_count())
             for free, total in [torch.cuda.mem_get_info(i)]
         ]
-    else:
+    elif LLM_ENABLED:
         info["warning"] = (
             "CPU inference is slow (~60-200s). "
             "Install CUDA 12.x for ~3-8s latency."
@@ -995,6 +1013,9 @@ async def debug_symbol(symbol: str, request: Request, _user: CurrentUser):
 @router.post("/warm")
 async def warm(_user: User = Depends(require_admin)):
     """Eagerly load the model so the first /ask is not slow."""
+    if not LLM_ENABLED:
+        raise HTTPException(status_code=503, detail="The Orion LLM feature is disabled for this deployment.")
+
     t0 = time.perf_counter()
     _load_model()
     ms = (time.perf_counter() - t0) * 1000

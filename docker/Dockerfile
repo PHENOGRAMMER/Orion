@@ -6,8 +6,8 @@ WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+COPY backend/requirements.deploy.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.deploy.txt
 
 # ── Stage 2: runtime image ───────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
@@ -18,7 +18,6 @@ COPY --from=builder /install /usr/local
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
-COPY fine_tuned_model/ ./fine_tuned_model/
 
 RUN mkdir -p /data/orion
 
@@ -26,6 +25,7 @@ ENV PYTHONPATH=/app/backend
 ENV PERSISTENCE_DB=/data/orion/orion.db
 ENV AUTH_ENABLED=true
 ENV DEBUG=false
+ENV ORION_LLM_ENABLED=false
 
 EXPOSE 8000
 

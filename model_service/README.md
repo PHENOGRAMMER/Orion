@@ -19,6 +19,7 @@ Required environment variables:
 ORION_ADAPTER_REPO=ARYANPHENOM/orion-lora-adapter
 ORION_BASE_MODEL=deepseek-ai/deepseek-coder-1.3b-instruct
 HF_TOKEN=<Space secret with read access to the private adapter repository>
+MODEL_SERVICE_TOKEN=<random token shared only with the Orion backend>
 ```
 
 Endpoints:

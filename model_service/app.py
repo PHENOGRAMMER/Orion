@@ -7,7 +7,7 @@ import time
 from functools import lru_cache
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from huggingface_hub import snapshot_download
 from peft import PeftModel
 from pydantic import BaseModel, Field
@@ -20,6 +20,7 @@ BASE_MODEL = os.getenv(
 )
 ADAPTER_REPO = os.getenv("ORION_ADAPTER_REPO", "ARYANPHENOM/orion-lora-adapter")
 HF_TOKEN = os.getenv("HF_TOKEN")
+MODEL_SERVICE_TOKEN = os.getenv("MODEL_SERVICE_TOKEN")
 MAX_INPUT_TOKENS = int(os.getenv("ORION_MAX_INPUT_TOKENS", "1536"))
 DEFAULT_MAX_NEW_TOKENS = int(os.getenv("ORION_MAX_TOKENS", "65"))
 
@@ -44,6 +45,14 @@ class GenerateResponse(BaseModel):
     text: str
     device: str
     latency_ms: float
+
+
+def require_service_token(authorization: str | None = Header(default=None)) -> None:
+    """Protect inference endpoints when a shared service token is configured."""
+    if not MODEL_SERVICE_TOKEN:
+        raise HTTPException(status_code=503, detail="MODEL_SERVICE_TOKEN is not configured")
+    if authorization != f"Bearer {MODEL_SERVICE_TOKEN}":
+        raise HTTPException(status_code=401, detail="Invalid model service token")
 
 
 def _build_prompt(tokenizer, question: str, context: str) -> str:
@@ -92,7 +101,7 @@ def health() -> dict[str, object]:
 
 
 @app.post("/warm")
-def warm() -> dict[str, object]:
+def warm(_: None = Depends(require_service_token)) -> dict[str, object]:
     started = time.perf_counter()
     load_model()
     return {
@@ -103,7 +112,10 @@ def warm() -> dict[str, object]:
 
 
 @app.post("/generate", response_model=GenerateResponse)
-def generate(request: GenerateRequest) -> GenerateResponse:
+def generate(
+    request: GenerateRequest,
+    _: None = Depends(require_service_token),
+) -> GenerateResponse:
     started = time.perf_counter()
     try:
         model, tokenizer, _ = load_model()

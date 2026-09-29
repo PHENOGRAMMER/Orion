@@ -20,6 +20,8 @@ env/
 # ======================
 .env
 **/.env
+.streamlit/secrets.toml
+**/.streamlit/secrets.toml
 
 # ======================
 # Node
@@ -45,3 +47,15 @@ coverage/
 # ======================
 .DS_Store
 Thumbs.db
+
+# ======================
+# Generated artifacts
+# ======================
+debug.txt
+unresolved_calls.txt
+backend/.orion/
+backend/graph_export*.json
+backend/orion_dataset*.jsonl
+backend/scan_payload.json
+fine_tuned_model/
+scratch/

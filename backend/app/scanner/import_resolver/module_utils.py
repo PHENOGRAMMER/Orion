@@ -142,4 +142,4 @@ def normalize_import_path(
 
             return file_info.path
 
-    return path.as_posix()
+    return path.as_posix()

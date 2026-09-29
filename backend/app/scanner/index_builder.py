@@ -2,7 +2,6 @@
 Project index builder.
 """
 
-from app.scanner.knowledge_graph.builder import KnowledgeGraphBuilder
 from pathlib import Path
 
 from app.scanner.import_resolver.module_utils import ModuleNameBuilder
@@ -166,3 +165,4 @@ class ProjectIndexBuilder:
             if module is not None:
 
                 index.module_index[module.name] = module
+                index.module_by_path[str(module.path.resolve()).lower()] = module

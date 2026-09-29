@@ -67,7 +67,18 @@ class GraphNode(BaseModel):
 
     qualified_name: str | None = None
 
+    #
+    # Module that declares this node, e.g. "app.scanner.scanner".
+    #
+    # Stored explicitly rather than derived from qualified_name: splitting a
+    # dotted name cannot tell you where the module ends and the class begins,
+    # so "a.b.c.func" and "a.b.Class.method" are indistinguishable by shape.
+    #
+    module: str | None = None
+
     line: int | None = None
+
+    end_line: int | None = None
 
     metadata: dict[str, str] = Field(default_factory=dict)
 

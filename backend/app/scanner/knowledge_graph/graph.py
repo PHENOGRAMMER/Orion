@@ -3,7 +3,6 @@ Knowledge Graph.
 
 Stores nodes and edges and provides fast graph traversal.
 """
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -70,7 +69,7 @@ class KnowledgeGraph:
         # Prevent duplicate edges.
         #
 
-        if self.has_edge(edge.source, edge.target):
+        if self.has_edge(edge.source, edge.target, edge.type):
             return
 
         self.edges.append(edge)
@@ -143,13 +142,11 @@ class KnowledgeGraph:
         self,
         source: str,
         target: str,
+        edge_type=None
     ) -> bool:
-        """
-        Check whether an edge already exists.
-        """
 
         return any(
-            edge.target == target
+            edge.target == target and (edge_type is None or edge.type == edge_type)
             for edge in self._outgoing.get(source, [])
         )
 

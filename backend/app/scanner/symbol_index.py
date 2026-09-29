@@ -39,6 +39,8 @@ class SymbolInfo(BaseModel):
     # Line number where the definition starts
     line: int
 
+    end_line: int | None = None
+
     # One of:
     # class
     # function

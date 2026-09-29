@@ -12,8 +12,6 @@ from app.scanner.import_resolver.models import ModuleInfo
 from app.scanner.symbol_index import SymbolIndex
 from app.scanner.knowledge_graph.graph import KnowledgeGraph
 
-from pathlib import Path
-
 
 @dataclass(slots=True)
 class ProjectIndex:
@@ -42,6 +40,10 @@ class ProjectIndex:
     total_size_by_extension: dict[str, int] = field(default_factory=dict)
 
     module_index: dict[str, ModuleInfo] = field(default_factory=dict)
+
+    # resolved absolute path -> module, avoiding a full module-index scan for
+    # every Python file during import resolution
+    module_by_path: dict[str, ModuleInfo] = field(default_factory=dict)
 
     source_roots: list[SourceRoot] = field(default_factory=list)
 

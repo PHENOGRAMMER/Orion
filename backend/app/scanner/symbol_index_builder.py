@@ -59,6 +59,7 @@ class SymbolIndexBuilder:
                         path=Path(file_path),
                         module=module_name,
                         line=cls.line,
+                        end_line=cls.end_line,
                         symbol_type="class",
                     )
                 )
@@ -76,6 +77,7 @@ class SymbolIndexBuilder:
                         path=Path(file_path),
                         module=module_name,
                         line=fn.line,
+                        end_line=fn.end_line,
                         symbol_type="function",
                     )
                 )
@@ -95,6 +97,7 @@ class SymbolIndexBuilder:
                             path=Path(file_path),
                             module=module_name,
                             line=method.line,
+                            end_line=method.end_line,
                             symbol_type="method",
                         )
                     )

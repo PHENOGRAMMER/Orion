@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orion &middot; Knowledge Graph Explorer</title>
+  <meta name="description" content="Scan any Python project and explore its call graph &mdash; symbols, callers, callees, and impact &mdash; powered by Orion." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --bg:#0a0b0f;--bg2:#111318;--bg3:#191c24;--bg4:#1f2330;
+      --border:#2a2f3d;--border2:#363d52;
+      --accent:#6c63ff;--accent2:#a78bfa;
+      --green:#34d399;--orange:#fb923c;--red:#f87171;--blue:#60a5fa;
+      --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+      --radius:10px;--radius-lg:16px;
+      --shadow:0 4px 48px rgba(0,0,0,.7);
+      --glow:0 0 20px rgba(108,99,255,.25);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
+    button{cursor:pointer;font-family:inherit}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:var(--bg2)}
+    ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+    #app{display:grid;grid-template-rows:56px 1fr;height:100vh;overflow:hidden}
+
+    /* ── Topbar ─────────────────────────────────────────────── */
+    #topbar{display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);z-index:10;gap:14px}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;cursor:pointer;user-select:none;flex-shrink:0}
+    .logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+    .logo-text{background:linear-gradient(90deg,var(--accent2),var(--text));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .project-pill{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text2);max-width:340px;cursor:pointer;transition:border-color .2s,background .2s;flex-shrink:1;min-width:0}
+    .project-pill:hover{border-color:var(--accent);background:var(--bg4)}
+    .project-pill .pp-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+    .project-pill .pp-dot.idle{background:var(--text3)}
+    .project-pill .pp-path{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .scan-btn{display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--accent);border:none;border-radius:var(--radius);color:#fff;font-size:13px;font-weight:600;transition:opacity .2s,transform .1s;flex-shrink:0}
+    .scan-btn:hover{opacity:.9}.scan-btn:active{transform:scale(.97)}
+    .scan-btn svg{flex-shrink:0}
+    #search-wrap{flex:1;max-width:400px;position:relative}
+    #search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none}
+    #search{width:100%;padding:7px 11px 7px 33px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12.5px;font-family:'JetBrains Mono',monospace;outline:none;transition:border .2s,box-shadow .2s}
+    #search::placeholder{color:var(--text3)}#search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.15)}
+    #search-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;z-index:200;display:none;box-shadow:var(--shadow)}
+    #search-results.visible{display:block}
+    .search-item{padding:9px 13px;cursor:pointer;font-size:12px;font-family:'JetBrains Mono',monospace;transition:background .15s;border-bottom:1px solid var(--border)}
+    .search-item:last-child{border-bottom:none}
+    .search-item:hover,.search-item.active{background:var(--bg4)}
+    .search-item.active{box-shadow:inset 2px 0 0 var(--accent)}
+    .si-row{display:flex;align-items:center;gap:8px}
+    .si-kind{flex-shrink:0;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:.5px}
+    .si-name{font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .si-mod{margin-left:auto;flex-shrink:0;font-size:10px;color:var(--text3);max-width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:right}
+    .si-hint{display:flex;justify-content:space-between;padding:7px 13px;font-size:10px;color:var(--text3);background:var(--bg2);border-top:1px solid var(--border);font-family:'Inter',sans-serif}
+    .topbar-stats{margin-left:auto;display:flex;gap:18px;flex-shrink:0}
+    .stat-pill{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+    .stat-pill strong{color:var(--text);font-weight:600}
+    .stat-dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+    /* ── Main layout ─────────────────────────────────────────── */
+    #main{display:grid;grid-template-columns:288px 1fr;overflow:hidden}
+    #sidebar{background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:18px 0}
+    .sidebar-section{margin-bottom:22px}
+    .sidebar-title{padding:0 18px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3)}
+    .symbol-card{padding:9px 18px;cursor:pointer;transition:background .15s;border-left:2px solid transparent;display:flex;align-items:flex-start;gap:9px}
+    .symbol-card:hover{background:var(--bg3);border-left-color:var(--border2)}
+    .symbol-card.active{background:rgba(108,99,255,.1);border-left-color:var(--accent)}
+    .sc-icon{width:24px;height:24px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;margin-top:1px}
+    .ti-fn{background:rgba(108,99,255,.2);color:var(--accent2)}.ti-mt{background:rgba(96,165,250,.2);color:var(--blue)}.ti-cls{background:rgba(52,211,153,.2);color:var(--green)}.ti-mod{background:rgba(251,146,60,.2);color:var(--orange)}.ti-unk{background:rgba(100,116,139,.2);color:var(--text3)}
+    .sc-body{flex:1;min-width:0}
+    .sc-name{font-size:12px;font-weight:500;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sc-meta{font-size:10.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sc-badge{margin-left:auto;flex-shrink:0;font-size:11px;font-weight:600;color:var(--accent2);background:rgba(108,99,255,.12);border-radius:6px;padding:1px 6px}
+
+    /* ── Content ─────────────────────────────────────────────── */
+    #content{overflow-y:auto;background:var(--bg)}
+    #content-inner{padding:28px;max-width:960px;margin:0 auto}
+    .hero{text-align:center;padding:48px 0 40px}
+    .hero-title{font-size:34px;font-weight:700;letter-spacing:-.5px;background:linear-gradient(120deg,var(--text),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hero-sub{margin-top:10px;font-size:15px;color:var(--text2)}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:32px}
+    .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;transition:border-color .2s,box-shadow .2s;cursor:default}
+    .stat-card:hover{border-color:var(--accent);box-shadow:var(--glow)}
+    .stat-card .sc-val{font-size:28px;font-weight:700}
+    .stat-card .sc-lbl{font-size:12px;color:var(--text2);margin-top:4px}
+    .home-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:28px}
+    .panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+    .panel-header{padding:13px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .panel-dot{width:7px;height:7px;border-radius:50%}
+    .panel-list{padding:8px 0}
+    .panel-item{padding:8px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .15s}
+    .panel-item:hover{background:var(--bg3)}
+    .pi-name{flex:1;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+    .pi-count{font-size:11px;font-weight:600;color:var(--accent2);background:rgba(108,99,255,.12);border-radius:6px;padding:1px 6px;flex-shrink:0}
+    .pi-count-green{font-size:11px;font-weight:600;color:var(--green);background:rgba(52,211,153,.1);border-radius:6px;padding:1px 6px;flex-shrink:0}
+
+    /* ── Symbol view ─────────────────────────────────────────── */
+    #symbol-view{display:none}
+    .breadcrumb{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:24px}
+    .bc-item{font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text2);cursor:pointer;padding:2px 6px;border-radius:5px;transition:color .15s}
+    .bc-item:hover{color:var(--text);background:var(--bg3)}.bc-item.current{color:var(--text3);cursor:default}.bc-item.current:hover{background:none}
+    .bc-sep{color:var(--text3);font-size:12px}
+    .bc-home{color:var(--accent2);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:5px}.bc-home:hover{background:var(--bg3)}
+    .symbol-header{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px;margin-bottom:22px;display:flex;align-items:flex-start;gap:14px}
+    .sh-icon{width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+    .sh-body{flex:1;min-width:0}
+    .sh-qn{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;word-break:break-all}
+    .sh-meta{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;align-items:center}
+    .sh-badge{font-size:11px;padding:3px 10px;border-radius:6px;font-weight:600}
+    .sh-file{font-size:12px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+    .relations-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .rel-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+    .rel-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+    .rel-count{margin-left:auto;font-size:11px;color:var(--text3);background:var(--bg4);border-radius:5px;padding:2px 7px}
+    .rel-empty{padding:20px;text-align:center;color:var(--text3);font-size:13px}
+    .rel-item{padding:9px 18px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s;border-bottom:1px solid var(--border)}
+    .rel-item:last-child{border-bottom:none}.rel-item:hover{background:var(--bg3)}
+    .ri-icon{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+    .ri-name{font-size:11.5px;font-family:'JetBrains Mono',monospace;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rel-arrow-in{color:var(--green);font-size:13px;flex-shrink:0}
+    .rel-arrow-out{color:var(--accent2);font-size:13px;flex-shrink:0}
+    .impact-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 18px;margin-top:18px;display:flex;align-items:center;gap:14px}
+    .ib-item{text-align:center;flex:1}.ib-val{font-size:22px;font-weight:700}.ib-label{font-size:11px;color:var(--text2);margin-top:2px}
+    .ib-sep{width:1px;height:34px;background:var(--border)}
+    .impact-btn{margin-left:auto;padding:7px 14px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-size:12px;transition:all .2s}
+    .impact-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent2);background:rgba(108,99,255,.07)}
+    .impact-btn:disabled{opacity:.5;cursor:not-allowed}
+
+    /* ── LLM Ask panel ───────────────────────────────────────── */
+    #llm-panel{margin-top:18px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+    .llm-header{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .llm-header-title{font-size:13px;font-weight:600;flex:1}
+    #llm-ask-btn{padding:6px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:var(--radius);color:#fff;font-size:12px;font-weight:600;transition:opacity .2s,transform .1s;flex-shrink:0}
+    #llm-ask-btn:hover:not(:disabled){opacity:.88}
+    #llm-ask-btn:active:not(:disabled){transform:scale(.97)}
+    #llm-ask-btn:disabled{opacity:.45;cursor:not-allowed}
+    .llm-question-row{padding:12px 18px;display:flex;gap:8px;border-bottom:1px solid var(--border)}
+    #llm-question{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:8px 12px;outline:none;resize:none;transition:border .2s,box-shadow .2s;min-height:40px;max-height:120px}
+    #llm-question:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.15)}
+    #llm-question::placeholder{color:var(--text3)}
+    #llm-answer{padding:16px 18px;font-size:13px;line-height:1.65;color:var(--text2);white-space:pre-wrap;min-height:52px;word-break:break-word}
+    #llm-answer.streaming{color:var(--text)}
+    #llm-answer .cursor{display:inline-block;width:2px;height:14px;background:var(--accent2);margin-left:2px;vertical-align:text-bottom;animation:blink .75s step-end infinite}
+    #llm-answer code{background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--accent2)}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    .llm-footer{padding:6px 18px 10px;display:flex;align-items:center;gap:10px}
+    .llm-latency{font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex:1}
+    #llm-copy-btn{padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:11px;transition:all .2s;display:none}
+    #llm-copy-btn:hover{border-color:var(--accent);color:var(--accent2)}
+    /* ── Suggested questions ─────────────────────────────────── */
+    .llm-suggestions{padding:8px 18px 12px;display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+    .llm-chip{padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:99px;font-size:11px;color:var(--text2);cursor:pointer;transition:all .2s;white-space:nowrap}
+    .llm-chip:hover{border-color:var(--accent);color:var(--accent2);background:rgba(108,99,255,.07)}
+    /* ── Call path finder ────────────────────────────────────── */
+    #path-panel{margin-top:18px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+    .path-header{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+    .path-inputs{padding:14px 18px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)}
+    .path-inputs input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 11px;outline:none;transition:border .2s}
+    .path-inputs input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.15)}
+    .path-inputs input::placeholder{color:var(--text3)}
+    .path-arrow{color:var(--text3);font-size:16px;flex-shrink:0}
+    #path-find-btn{padding:7px 14px;background:var(--accent);border:none;border-radius:var(--radius);color:#fff;font-size:12px;font-weight:600;flex-shrink:0;transition:opacity .2s}
+    #path-find-btn:hover:not(:disabled){opacity:.85}
+    #path-find-btn:disabled{opacity:.45;cursor:not-allowed}
+    #path-result{padding:14px 18px;font-size:13px;color:var(--text2);min-height:44px}
+    .path-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+    .path-node{padding:5px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:'JetBrains Mono',monospace;font-size:11.5px;cursor:pointer;transition:all .2s;color:var(--text)}
+    .path-node:hover{border-color:var(--accent);color:var(--accent2)}
+    .path-node.focal{border-color:var(--accent);background:rgba(108,99,255,.1);color:var(--accent2)}
+    .path-hop{color:var(--text3);font-size:13px}
+
+    /* ── Loader ──────────────────────────────────────────────── */
+    .loading-ring{width:34px;height:34px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .centered{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:60px}
+    .centered p{color:var(--text2);font-size:14px}
+    .err-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--radius);padding:13px 17px;font-size:13px;color:var(--red);max-width:520px;text-align:center}
+    .fade-in{animation:fadeIn .25s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+    /* ── Scan modal ──────────────────────────────────────────── */
+    #modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+    #modal-overlay.open{display:flex}
+    #modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-lg);width:min(600px,95vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden}
+    .modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+    .modal-title{font-size:15px;font-weight:700;flex:1}
+    .modal-close{width:28px;height:28px;border:none;background:var(--bg3);border-radius:6px;color:var(--text2);font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+    .modal-close:hover{background:var(--bg4);color:var(--text)}
+
+    /* Path input row */
+    .path-row{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;gap:8px}
+    #path-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:8px 12px;outline:none;transition:border .2s,box-shadow .2s}
+    #path-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.15)}
+    #path-input::placeholder{color:var(--text3)}
+    .go-btn{padding:8px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-size:12px;transition:all .2s}
+    .go-btn:hover{border-color:var(--accent);color:var(--accent2)}
+
+    /* Browser pane */
+    #browser-pane{flex:1;overflow-y:auto;padding:6px 0}
+    .browser-up{padding:9px 20px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);transition:background .15s;border-bottom:1px solid var(--border)}
+    .browser-up:hover{background:var(--bg3)}
+    .browser-row{padding:8px 20px;cursor:pointer;display:flex;align-items:center;gap:9px;font-size:12.5px;transition:background .15s;border-bottom:1px solid var(--border)}
+    .browser-row:last-child{border-bottom:none}
+    .browser-row:hover{background:var(--bg3)}
+    .browser-row.selected{background:rgba(108,99,255,.1)}
+    .br-icon{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px}
+    .br-name{flex:1;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .br-sel-tick{color:var(--accent2);font-size:14px;flex-shrink:0}
+
+    /* Modal footer */
+    .modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+    .selected-path{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .scan-action-btn{padding:9px 20px;background:var(--accent);border:none;border-radius:var(--radius);color:#fff;font-size:13px;font-weight:600;transition:opacity .2s;flex-shrink:0}
+    .scan-action-btn:hover:not(:disabled){opacity:.85}
+    .scan-action-btn:disabled{opacity:.4;cursor:not-allowed}
+    .cancel-btn{padding:9px 16px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-size:13px;transition:border-color .2s;flex-shrink:0}
+    .cancel-btn:hover{border-color:var(--border2)}
+
+    /* Progress bar */
+    #scan-progress{padding:14px 22px;border-top:1px solid var(--border);display:none}
+    .progress-label{font-size:12px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+    .progress-track{height:4px;background:var(--bg4);border-radius:99px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;width:30%;animation:progress-shimmer 1.4s ease-in-out infinite alternate}
+    @keyframes progress-shimmer{from{width:15%}to{width:85%}}
+    .progress-fill.done{animation:none;width:100%;background:var(--green)}
+    .progress-fill.error{animation:none;width:100%;background:var(--red)}
+
+    /* ── Proposals view ──────────────────────────────────────── */
+    .proposal-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px;transition:border-color .2s}
+    .proposal-card:hover{border-color:var(--border2)}
+    .prop-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+    .prop-title{font-size:15px;font-weight:600;color:var(--text);flex:1;line-height:1.4}
+    .prop-meta{display:flex;gap:8px;align-items:center;font-size:11px;flex-wrap:wrap;margin-top:6px;color:var(--text3)}
+    .badge-proposed{background:rgba(251,146,60,.15);color:var(--orange);padding:2px 8px;border-radius:6px;font-weight:600}
+    .badge-applied{background:rgba(52,211,153,.15);color:var(--green);padding:2px 8px;border-radius:6px;font-weight:600}
+    .badge-failed{background:rgba(248,113,113,.15);color:var(--red);padding:2px 8px;border-radius:6px;font-weight:600}
+    .badge-applying{background:rgba(108,99,255,.15);color:var(--accent2);padding:2px 8px;border-radius:6px;font-weight:600}
+    .diff-block{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:'JetBrains Mono',monospace;font-size:12px;overflow-x:auto;line-height:1.55;max-height:360px;overflow-y:auto;margin-top:12px}
+    .diff-line-add{background:rgba(52,211,153,.12);color:#34d399;display:block;border-radius:2px;padding:0 4px}
+    .diff-line-del{background:rgba(248,113,113,.12);color:#f87171;display:block;border-radius:2px;padding:0 4px}
+    .diff-line-hunk{color:var(--accent2);font-weight:600;display:block;padding:2px 0}
+    .diff-line-hdr{color:var(--text3);font-weight:600;display:block}
+    .apply-btn{padding:8px 16px;background:var(--green);border:none;border-radius:var(--radius);color:#0a0b0f;font-size:12.5px;font-weight:600;transition:opacity .2s;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+    .apply-btn:hover:not(:disabled){opacity:.9}.apply-btn:disabled{opacity:.5;cursor:not-allowed}
+    .val-box{margin-top:12px;padding:12px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius);font-family:'JetBrains Mono',monospace;font-size:11.5px;overflow-x:auto;white-space:pre-wrap}
+
+    @media(max-width:900px){
+      #main{grid-template-columns:1fr}#sidebar{display:none}
+      .stats-grid{grid-template-columns:repeat(2,1fr)}
+      .home-cols,.relations-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- Topbar -->
+  <header id="topbar">
+    <div class="logo" id="home-btn" title="Home">
+      <div class="logo-icon">&#x2B21;</div>
+      <span class="logo-text">Orion</span>
+    </div>
+
+    <div class="project-pill" id="project-pill" title="Click to scan a different project">
+      <div class="pp-dot idle" id="pp-dot"></div>
+      <span class="pp-path" id="pp-path">No project scanned</span>
+    </div>
+
+    <button class="scan-btn" id="open-scan-btn" title="Scan a project folder">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      Scan Project
+    </button>
+
+    <div id="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="search" type="text" placeholder="Search symbols…  (press /)" autocomplete="off" spellcheck="false" />
+      <div id="search-results"></div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <button id="proposals-tab-btn" title="View edit proposals"
+        style="padding:6px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-size:11px">
+        Proposals
+      </button>
+      <button id="api-key-btn" title="Set Orion API key"
+        style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-size:11px">
+        API Key
+      </button>
+      <div class="topbar-stats" id="topbar-stats"></div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div id="main">
+    <aside id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">Most Called</div>
+        <div id="sb-top-called"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Top Callers</div>
+        <div id="sb-top-callers"></div>
+      </div>
+    </aside>
+
+    <main id="content">
+      <div id="content-inner">
+        <div id="home-view">
+          <div class="centered">
+            <div class="loading-ring"></div>
+            <p>Connecting to Orion API&hellip;</p>
+          </div>
+        </div>
+        <div id="symbol-view"></div>
+        <div id="proposals-view" style="display:none"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Scan Modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-header">
+      <div class="modal-title">&#128193; Scan a Project</div>
+      <button class="modal-close" id="modal-close-btn">&#x2715;</button>
+    </div>
+
+    <div class="path-row">
+      <input id="path-input" type="text" placeholder="Paste or type a directory path..." spellcheck="false" />
+      <button class="go-btn" id="browse-go-btn">Browse &rarr;</button>
+    </div>
+
+    <div id="browser-pane">
+      <div class="centered" style="padding:30px"><div class="loading-ring"></div><p>Loading&hellip;</p></div>
+    </div>
+
+    <div id="scan-progress">
+      <div class="progress-label"><div class="loading-ring" style="width:16px;height:16px;border-width:2px" id="prog-ring"></div><span id="prog-label">Scanning&hellip;</span></div>
+      <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+    </div>
+
+    <div class="modal-footer">
+      <div class="selected-path" id="selected-path-label">No directory selected</div>
+      <button class="cancel-btn" id="modal-cancel-btn">Cancel</button>
+      <button class="scan-action-btn" id="do-scan-btn" disabled>Scan &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// Served same-origin from /app, so requests are relative and Orion works on
+// any host or port without editing this file. Only a page opened directly off
+// disk (file://) has no origin to be relative to, so it falls back to the
+// default dev address — that case also needs ALLOW_ORIGINS to include "null".
+const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
+let gStats = null, navHist = [], selectedPath = '', scanJobId = null, pollTimer = null;
+const $ = id => document.getElementById(id);
+
+const API_KEY_STORAGE = 'orion_api_key';
+
+function getApiKey() {
+  return sessionStorage.getItem(API_KEY_STORAGE) || '';
+}
+
+function setApiKey(key) {
+  const value = key.trim();
+  if (value) {
+    sessionStorage.setItem(API_KEY_STORAGE, value);
+  } else {
+    sessionStorage.removeItem(API_KEY_STORAGE);
+  }
+}
+
+$('api-key-btn').addEventListener('click', () => {
+  const current = getApiKey();
+  const key = window.prompt('Enter your Orion admin API key:', current);
+
+  if (key !== null) {
+    setApiKey(key);
+    boot();
+  }
+});
+
+function fmtN(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n); }
+function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const TK = {function:'fn',method:'mt',class:'cls',module:'mod'};
+const TL = {function:'FN',method:'MT',class:'CLS',module:'MOD',variable:'VAR'};
+function tk(t){return TK[t]||'unk'}function tl(t){return TL[t]||(t||'').slice(0,3).toUpperCase()||'?'}
+function short(qn){if(!qn)return'?';const p=qn.split('.');return p.slice(-2).join('.')}
+function fileTail(f){return f?f.replace(/\\/g,'/').split('/').slice(-3).join('/'):''}
+
+// ── API ──────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const headers = new Headers(opts.headers || {});
+  const key = getApiKey();
+
+  if (key) {
+    headers.set('X-API-Key', key);
+  }
+
+  const r = await fetch(API + path, {
+    ...opts,
+    headers
+  });
+
+  if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + await r.text());
+  return r.json();
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+async function boot() {
+  try {
+    gStats = await apiFetch('/graph/stats');
+    onStatsLoaded(gStats);
+  } catch(e) {
+    $('home-view').innerHTML = '<div class="centered"><p>Cannot reach Orion API.</p>' +
+      '<div class="err-box">Run: <code>uvicorn app.main:app --reload</code> on port 8000<br><br>' + escH(e.message) + '</div></div>';
+    $('pp-path').textContent = 'API offline';
+  }
+}
+
+function onStatsLoaded(s) {
+  gStats = s;
+  renderTopbar(s);
+  renderSidebar(s);
+  renderHome(s);
+  // Update project pill
+  const path = s.project_path || '';
+  $('pp-path').textContent = path ? path.split(/[/\\]/).slice(-2).join('/') || path : 'No project';
+  $('pp-path').title = path;
+  $('pp-dot').className = path ? 'pp-dot' : 'pp-dot idle';
+}
+
+// ── Topbar ───────────────────────────────────────────────────────
+function renderTopbar(s) {
+  const calls = (s.by_edge_type||{}).calls||0;
+  $('topbar-stats').innerHTML =
+    '<div class="stat-pill"><div class="stat-dot"></div><strong>'+fmtN(s.nodes)+'</strong>&nbsp;nodes</div>'+
+    '<div class="stat-pill"><div class="stat-dot" style="background:var(--green)"></div><strong>'+fmtN(calls)+'</strong>&nbsp;calls</div>'+
+    '<div class="stat-pill" title="Symbols reachable from the search bar"><div class="stat-dot" style="background:var(--orange)"></div><strong>'+fmtN(s.symbols_indexed||0)+'</strong>&nbsp;searchable</div>';
+}
+
+// ── Sidebar ──────────────────────────────────────────────────────
+function renderSidebar(s) {
+  buildSymList('sb-top-called', s.top_called||[]);
+  buildSymList('sb-top-callers', s.top_callers||[]);
+}
+function buildSymList(id, list) {
+  const el=$(id);
+  if(!list.length){el.innerHTML='<div class="sc-meta" style="padding:8px 18px;color:var(--text3)">None</div>';return}
+  el.innerHTML = list.map(sym => symCardHTML(sym.qualified_name, sym.type, sym.count)).join('');
+  el.querySelectorAll('[data-nav]').forEach(c=>c.addEventListener('click',()=>navTo(c.dataset.nav)));
+}
+function symCardHTML(qn,type,count) {
+  const k=tk(type),lbl=tl(type),prefix=qn.split('.').slice(0,-2).join('.')||qn;
+  return '<div class="symbol-card" data-nav="'+escH(qn)+'">' +
+    '<div class="sc-icon ti-'+k+'">'+escH(lbl.slice(0,2))+'</div>' +
+    '<div class="sc-body"><div class="sc-name" title="'+escH(qn)+'">'+escH(short(qn))+'</div>' +
+    '<div class="sc-meta">'+escH(prefix)+'</div></div>' +
+    '<div class="sc-badge">'+count+'</div></div>';
+}
+
+// ── Home ─────────────────────────────────────────────────────────
+function renderHome(s) {
+  const nt=s.by_node_type||{},et=s.by_edge_type||{};
+  const tc=s.top_called||[],tca=s.top_callers||[];
+  const projectLine = s.project_path
+    ? '<p style="margin-top:8px;font-size:12px;color:var(--text3);font-family:JetBrains Mono,monospace">'+escH(s.project_path)+'</p>'
+    : '<p style="margin-top:8px;font-size:13px;color:var(--text3)">Use <strong style="color:var(--accent2)">Scan Project</strong> to analyse any local directory</p>';
+  $('home-view').className='fade-in';
+  $('home-view').innerHTML =
+    '<div class="hero">' +
+      '<h1 class="hero-title">Knowledge Graph Explorer</h1>' +
+      '<p class="hero-sub">Browse callers, callees &amp; impact. Click any symbol to start.</p>' +
+      projectLine +
+    '</div>' +
+    '<div class="stats-grid">' +
+      sc(s.nodes,'Total Nodes','#6c63ff') + sc(s.edges,'Total Edges','#60a5fa') +
+      sc(et.calls||0,'Call Edges','#34d399') + sc((nt.function||0)+(nt.method||0),'Fns + Methods','#fb923c') +
+    '</div>' +
+    '<div class="home-cols">' +
+      tp('Most Called Symbols',tc,false,'#a78bfa') + tp('Top Callers',tca,true,'#34d399') +
+    '</div>';
+  $('home-view').querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navTo(el.dataset.nav)));
+}
+function sc(v,l,c){return '<div class="stat-card"><div class="sc-val" style="color:'+c+'">'+fmtN(v)+'</div><div class="sc-lbl">'+l+'</div></div>'}
+function tp(title,list,green,color) {
+  const items = list.map(s=>'<div class="panel-item" data-nav="'+escH(s.qualified_name)+'">' +
+    '<div style="width:7px;height:7px;border-radius:50%;background:'+color+';flex-shrink:0"></div>' +
+    '<div class="pi-name" title="'+escH(s.qualified_name)+'">'+escH(short(s.qualified_name))+'</div>' +
+    '<div class="'+(green?'pi-count-green':'pi-count')+'">'+s.count+'</div></div>').join('');
+  return '<div class="panel"><div class="panel-header"><div class="panel-dot" style="background:'+color+'"></div>'+title+'</div>' +
+    '<div class="panel-list">'+(items||'<div class="rel-empty">No data</div>')+'</div></div>';
+}
+
+// ── Navigate ─────────────────────────────────────────────────────
+async function navTo(qn, push=true) {
+  if(push) navHist.push(qn);
+  showView('symbol');
+  $('symbol-view').innerHTML='<div class="centered"><div class="loading-ring"></div><p>Loading '+escH(short(qn))+'&hellip;</p></div>';
+  $('sidebar').querySelectorAll('.symbol-card').forEach(c=>c.classList.toggle('active',c.dataset.nav===qn));
+  try {
+    const d = await apiFetch('/graph/symbol/'+encodeURIComponent(qn));
+    renderSymbol(d);
+    // Nothing to cache here any more: /graph/search covers every symbol in the
+    // graph, so warming a client-side list from visited nodes is redundant.
+  } catch(e) {
+    $('symbol-view').innerHTML='<div class="centered"><p>Failed to load symbol.</p><div class="err-box">'+escH(e.message)+'</div></div>';
+  }
+}
+
+// ── Symbol detail ────────────────────────────────────────────────
+function renderSymbol(d) {
+  const sym=d.symbol;
+  if(!sym){$('symbol-view').innerHTML='<div class="centered"><p>Symbol not found.</p></div>';return}
+  const k=tk(sym.type);
+  $('symbol-view').className='fade-in';
+  $('symbol-view').innerHTML =
+    '<div class="breadcrumb" id="bc"></div>' +
+    '<div class="symbol-header"><div class="sh-icon ti-'+k+'">'+escH(tl(sym.type).slice(0,2))+'</div>' +
+    '<div class="sh-body"><div class="sh-qn">'+escH(sym.qualified_name)+'</div>' +
+    '<div class="sh-meta"><span class="sh-badge ti-'+k+'">'+escH(sym.type)+'</span>' +
+    (sym.file?'<span class="sh-file">'+escH(fileTail(sym.file))+'</span>':'') +
+    (sym.line?'<span class="sh-file">L'+sym.line+'</span>':'')+
+    '</div></div></div>' +
+    '<div class="relations-grid">'+relPanel(d.callers,'in','Callers')+relPanel(d.callees,'out','Callees')+'</div>' +
+    '<div class="impact-bar">' +
+    '<div class="ib-item"><div class="ib-val" style="color:var(--accent2)">'+d.callers.length+'</div><div class="ib-label">direct callers</div></div>' +
+    '<div class="ib-sep"></div>' +
+    '<div class="ib-item"><div class="ib-val" style="color:var(--green)">'+d.callees.length+'</div><div class="ib-label">direct callees</div></div>' +
+    '<button class="impact-btn" id="impact-btn">Run impact analysis &rarr;</button></div>' +
+    '<div id="path-panel">' +
+      '<div class="path-header"><span style="font-size:14px">⇢</span>&nbsp;Call Path Finder</div>' +
+      '<div class="path-inputs">' +
+        '<input id="path-from" type="text" placeholder="From symbol (qualified name)" value="'+escH(sym.qualified_name)+'" spellcheck="false"/>' +
+        '<span class="path-arrow">→</span>' +
+        '<input id="path-to" type="text" placeholder="To symbol (qualified name)" spellcheck="false"/>' +
+        '<button id="path-find-btn">Find Path</button>' +
+      '</div>' +
+      '<div id="path-result" style="color:var(--text3);font-style:italic">Enter a destination symbol and click Find Path.</div>' +
+    '</div>' +
+    '<div id="llm-panel">' +
+      '<div class="llm-header"><span style="font-size:15px">✦</span><span class="llm-header-title">Ask Orion about this symbol</span><button id="llm-ask-btn">Ask →</button></div>' +
+      '<div class="llm-suggestions">' +
+        '<span class="llm-chip" data-q="What happens if I change this?">What happens if I change this?</span>' +
+        '<span class="llm-chip" data-q="Who depends on this symbol?">Who depends on this?</span>' +
+        '<span class="llm-chip" data-q="What does this symbol do?">What does this do?</span>' +
+        '<span class="llm-chip" data-q="Is this a good candidate for refactoring?">Refactoring candidate?</span>' +
+      '</div>' +
+      '<div class="llm-question-row"><textarea id="llm-question" rows="1" placeholder="What happens if I change this? Who depends on it? What does it do?"></textarea></div>' +
+      '<div id="llm-answer" style="color:var(--text3);font-style:italic">Type a question above and click Ask.</div>' +
+      '<div class="llm-footer"><div class="llm-latency" id="llm-latency"></div><button id="llm-copy-btn">Copy</button></div>' +
+    '</div>';
+  buildBreadcrumb($('bc'));
+  $('symbol-view').querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navTo(el.dataset.nav)));
+  $('impact-btn').addEventListener('click',()=>runImpact(sym.qualified_name));
+  $('llm-ask-btn').addEventListener('click',()=>runLlmAsk(sym.qualified_name));
+
+  // Suggestion chips pre-fill the textarea
+  $('symbol-view').querySelectorAll('.llm-chip').forEach(chip=>{
+    chip.addEventListener('click',()=>{
+      $('llm-question').value=chip.dataset.q;
+      $('llm-question').style.height='auto';
+      $('llm-question').style.height=Math.min($('llm-question').scrollHeight,120)+'px';
+      runLlmAsk(sym.qualified_name);
+    });
+  });
+
+  // Copy button
+  $('llm-copy-btn').addEventListener('click',()=>{
+    const text=$('llm-answer').innerText||'';
+    navigator.clipboard.writeText(text).then(()=>{
+      const btn=$('llm-copy-btn');btn.textContent='Copied!';
+      setTimeout(()=>{btn.textContent='Copy'},1500);
+    });
+  });
+
+  // Auto-resize textarea
+  $('llm-question').addEventListener('input', function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
+  // Enter (without shift) submits
+  $('llm-question').addEventListener('keydown', e=>{
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runLlmAsk(sym.qualified_name);}
+  });
+
+  // Call path finder
+  $('path-find-btn').addEventListener('click',()=>{
+    const from=$('path-from').value.trim(), to=$('path-to').value.trim();
+    if(!from||!to){$('path-result').innerHTML='<span style="color:var(--red)">Enter both symbols.</span>';return;}
+    runPathFind(from,to);
+  });
+  $('path-to').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){const from=$('path-from').value.trim(),to=$('path-to').value.trim();if(from&&to)runPathFind(from,to);}
+  });
+}
+
+function relPanel(nodes,dir,title) {
+  const arr=dir==='in'?'&larr;':'&rarr;',ac='rel-arrow-'+dir;
+  const hdr='<div class="rel-header"><span class="'+ac+'">'+arr+'</span>&nbsp;'+title+'<span class="rel-count">'+(nodes?nodes.length:0)+'</span></div>';
+  if(!nodes||!nodes.length) return '<div class="rel-panel">'+hdr+'<div class="rel-empty">None</div></div>';
+  const items=nodes.map(n=>{
+    if(!n.qualified_name)return'';
+    return '<div class="rel-item" data-nav="'+escH(n.qualified_name)+'">' +
+      '<div class="ri-icon ti-'+tk(n.type)+'">'+escH(tl(n.type).slice(0,2))+'</div>' +
+      '<div class="ri-name" title="'+escH(n.qualified_name)+'">'+escH(short(n.qualified_name))+'</div>' +
+      '<span class="'+ac+'">'+arr+'</span></div>';
+  }).join('');
+  return '<div class="rel-panel">'+hdr+items+'</div>';
+}
+
+function buildBreadcrumb(container) {
+  let html='<span class="bc-home" id="bc-home">&#8962;&nbsp;Home</span>';
+  navHist.forEach((qn,i)=>{
+    html+='<span class="bc-sep">/</span>';
+    html+=i===navHist.length-1
+      ?'<span class="bc-item current">'+escH(short(qn))+'</span>'
+      :'<span class="bc-item" data-bc="'+i+'" title="'+escH(qn)+'">'+escH(short(qn))+'</span>';
+  });
+  container.innerHTML=html;
+  container.querySelector('#bc-home').addEventListener('click',()=>{navHist=[];showHome()});
+  container.querySelectorAll('[data-bc]').forEach(el=>el.addEventListener('click',()=>{
+    const i=parseInt(el.dataset.bc);navHist=navHist.slice(0,i+1);navTo(navHist[navHist.length-1],false);
+  }));
+}
+
+// ── Markdown-lite renderer ───────────────────────────────────────
+// Renders `code` spans and **bold** — enough for Orion's answers.
+function renderMd(raw) {
+  // Strip tokenizer artifacts (Ġ = U+0120, space-prefixed BPE token)
+  let s = raw.replace(/\u0120/g, ' ').trim();
+  // Escape HTML first, then apply markdown so we don't double-escape
+  s = escH(s);
+  // `code` → <code>
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // **bold**
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Newlines → <br> for pre-wrap feel
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+// ── LLM Ask (streaming) ─────────────────────────────────────────
+async function runLlmAsk(focalSymbol) {
+  const question = ($('llm-question')?.value || '').trim();
+  if (!question) { $('llm-question').focus(); return; }
+
+  const btn = $('llm-ask-btn'), ans = $('llm-answer'), lat = $('llm-latency');
+  const copyBtn = $('llm-copy-btn');
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  ans.className = 'streaming';
+  ans.innerHTML = '<span class="cursor"></span>';
+  lat.textContent = '';
+  copyBtn.style.display = 'none';
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(API + '/llm/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getApiKey() ? {'X-API-Key': getApiKey()} : {})
+      },
+      body: JSON.stringify({question, focal_symbol: focalSymbol})
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let text = '';
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      text += dec.decode(value, {stream: true});
+      // Show raw text while streaming (with cursor) — render markdown at the end
+      ans.innerHTML = escH(text.replace(/\u0120/g,' ')) + '<span class="cursor"></span>';
+      ans.scrollTop = ans.scrollHeight;
+    }
+    // Final render: markdown-lite pass
+    ans.className = '';
+    ans.innerHTML = renderMd(text);
+    const ms = Math.round(performance.now() - t0);
+    lat.textContent = `⏱ ${(ms/1000).toFixed(1)}s  ·  ${focalSymbol}`;
+    copyBtn.style.display = 'block';
+  } catch(e) {
+    ans.className = '';
+    ans.innerHTML = '<span style="color:var(--red)">' + escH(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ask →';
+  }
+}
+
+// ── Call Path Finder ─────────────────────────────────────────────
+async function runPathFind(from, to) {
+  const result = $('path-result'), btn = $('path-find-btn');
+  btn.disabled = true;
+  btn.textContent = 'Finding…';
+  result.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><div class="loading-ring" style="width:18px;height:18px;border-width:2px"></div><span style="color:var(--text3)">Searching call graph…</span></div>';
+
+  try {
+    const d = await apiFetch('/graph/path?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
+    if (!d.path || d.path.length === 0) {
+      result.innerHTML = '<span style="color:var(--text3)">No call path found between these two symbols.</span>';
+      return;
+    }
+    const chain = d.path.map((node, i) => {
+      const isFocal = node === from || node === to;
+      const label = node.split('.').slice(-2).join('.');
+      return '<span class="path-node'+(isFocal?' focal':'')+'" data-nav="'+escH(node)+'" title="'+escH(node)+'">'+escH(label)+'</span>' +
+        (i < d.path.length-1 ? '<span class="path-hop">→</span>' : '');
+    }).join('');
+    result.innerHTML = '<div class="path-chain">'+chain+'</div>' +
+      '<div style="margin-top:10px;font-size:11px;color:var(--text3)">'+d.path.length+' symbol(s) · '+
+      (d.hops||d.path.length-1)+' hop(s)</div>';
+    // Make path nodes clickable
+    result.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navTo(el.dataset.nav)));
+  } catch(e) {
+    result.innerHTML = '<span style="color:var(--red)">'+escH(e.message)+'</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Find Path';
+  }
+}
+
+// ── Impact ───────────────────────────────────────────────────────
+async function runImpact(qn) {
+  const btn=$('impact-btn');btn.textContent='Loading\u2026';btn.disabled=true;
+  try {
+    const d=await apiFetch('/graph/symbol/'+encodeURIComponent(qn)+'/impact');
+    document.querySelector('.impact-detail')?.remove();
+    const div=document.createElement('div');div.className='impact-detail fade-in';div.style.marginTop='18px';
+    const mods=(d.affected_modules||[]).slice(0,10).map(m=>'<li style="font-family:JetBrains Mono,monospace;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border);color:var(--text2)">'+escH(m)+'</li>').join('');
+    div.innerHTML='<div class="panel"><div class="panel-header"><div class="panel-dot" style="background:var(--accent2)"></div>Impact Analysis</div>' +
+      '<div style="padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><div style="font-size:11px;color:var(--text3);margin-bottom:6px">DIRECT CALLERS</div><div style="font-size:26px;font-weight:700;color:var(--accent2)">'+d.direct_count+'</div></div>' +
+      '<div><div style="font-size:11px;color:var(--text3);margin-bottom:6px">TOTAL AFFECTED</div><div style="font-size:26px;font-weight:700;color:var(--red)">'+d.total_count+'</div></div>' +
+      '</div>'+(mods?'<div style="padding:0 18px 16px"><div style="font-size:11px;color:var(--text3);margin-bottom:8px">AFFECTED MODULES</div><ul style="list-style:none">'+mods+'</ul></div>':'')+'</div>';
+    document.querySelector('.impact-bar').after(div);btn.textContent='\u2713 Done';
+  } catch(e){btn.textContent='Error';btn.disabled=false}
+}
+
+// ── View switching ───────────────────────────────────────────────
+function showView(v){
+  $('home-view').style.display=v==='home'?'block':'none';
+  $('symbol-view').style.display=v==='symbol'?'block':'none';
+  $('proposals-view').style.display=v==='proposals'?'block':'none';
+}
+function showHome(){showView('home');$('sidebar').querySelectorAll('.symbol-card').forEach(c=>c.classList.remove('active'))}
+
+// ── Proposals ───────────────────────────────────────────────────
+$('proposals-tab-btn').addEventListener('click', showProposalsView);
+
+async function showProposalsView() {
+  showView('proposals');
+  const view = $('proposals-view');
+  view.className = 'fade-in';
+  view.innerHTML = '<div class="centered"><div class="loading-ring"></div><p>Loading edit proposals&hellip;</p></div>';
+
+  try {
+    const res = await apiFetch('/agent/proposals');
+    renderProposalsList(res.proposals || []);
+  } catch(e) {
+    view.innerHTML = '<div class="centered"><p>Failed to load proposals.</p><div class="err-box">' + escH(e.message) + '</div></div>';
+  }
+}
+
+function renderDiffHtml(diffText) {
+  if (!diffText) return '<div style="color:var(--text3);font-style:italic">No diff content</div>';
+  const lines = diffText.split('\n');
+  const html = lines.map(line => {
+    const esc = escH(line);
+    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff --git')) {
+      return '<span class="diff-line-hdr">' + esc + '</span>';
+    } else if (line.startsWith('@@')) {
+      return '<span class="diff-line-hunk">' + esc + '</span>';
+    } else if (line.startsWith('+')) {
+      return '<span class="diff-line-add">' + esc + '</span>';
+    } else if (line.startsWith('-')) {
+      return '<span class="diff-line-del">' + esc + '</span>';
+    }
+    return esc;
+  }).join('\n');
+  return '<div class="diff-block">' + html + '</div>';
+}
+
+function renderProposalsList(list) {
+  const view = $('proposals-view');
+  if (!list.length) {
+    view.innerHTML = '<div class="hero"><h2 class="hero-title" style="font-size:24px">Edit Proposals</h2>' +
+      '<p class="hero-sub" style="margin-top:8px">No proposed changes currently exist. Create proposals using the agent API.</p></div>';
+    return;
+  }
+
+  let html = '<div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">' +
+    '<h2 style="font-size:20px;font-weight:700">Agent Edit Proposals</h2>' +
+    '<span style="font-size:12px;color:var(--text3)">' + list.length + ' proposal(s)</span></div>';
+
+    list.forEach(prop => {
+      const statusClass = 'badge-' + (prop.status || 'proposed');
+      const isProposed = prop.status === 'proposed';
+      const val = prop.validation;
+      const isPassed = val ? (val.passed !== undefined ? val.passed : val.success) : false;
+      const retCode = val ? (val.returncode !== undefined ? val.returncode : val.exit_code) : 0;
+      const outText = val ? (val.output || (val.stdout ? val.stdout + (val.stderr ? '\n' + val.stderr : '') : '')) : '';
+
+      html += '<div class="proposal-card" id="prop-card-' + escH(prop.proposal_id) + '">' +
+        '<div class="prop-header">' +
+          '<div>' +
+            '<div class="prop-title">' + escH(prop.objective || 'Untitled Proposal') + '</div>' +
+            '<div class="prop-meta">' +
+              '<span class="' + statusClass + '">' + escH((prop.status || 'proposed').toUpperCase()) + '</span>' +
+              '<span>ID: <code>' + escH(prop.proposal_id) + '</code></span>' +
+              '<span>Mode: <code>' + escH(prop.validation_mode || 'backend-tests') + '</code></span>' +
+              (prop.created_at ? '<span>Created: ' + escH(prop.created_at) + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">' + escH(prop.summary || '') + '</div>' +
+        renderDiffHtml(prop.diff) +
+        (val ? '<div class="val-box" style="border-left:3px solid ' + (isPassed ? 'var(--green)' : 'var(--red)') + '">' +
+          '<div style="font-weight:600;margin-bottom:4px;color:' + (isPassed ? 'var(--green)' : 'var(--red)') + '">' +
+            (isPassed ? '✓ Validation Passed' : '✗ Validation Failed (Return Code ' + retCode + ')') +
+          '</div>' +
+          (val.command ? '<div style="color:var(--text3);margin-bottom:6px">$ ' + escH(Array.isArray(val.command) ? val.command.join(' ') : val.command) + '</div>' : '') +
+          (outText ? '<div style="color:var(--text)">' + escH(outText) + '</div>' : '') +
+        '</div>' : '') +
+        (isProposed ? '<div style="margin-top:14px;display:flex;gap:10px">' +
+          '<button class="apply-btn" onclick="applyProposalUI(\'' + escH(prop.proposal_id) + '\', this)">' +
+            '✓ Approve &amp; Apply Changes' +
+          '</button>' +
+        '</div>' : '') +
+      '</div>';
+    });
+
+  view.innerHTML = html;
+}
+
+async function applyProposalUI(proposalId, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Applying & Validating…';
+  try {
+    const res = await apiFetch('/agent/proposals/' + encodeURIComponent(proposalId) + '/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved: true })
+    });
+    showProposalsView();
+  } catch(e) {
+    btnEl.disabled = false;
+    btnEl.textContent = '✓ Approve & Apply Changes';
+    alert('Failed to apply proposal: ' + e.message);
+  }
+}
+
+// ── Search ───────────────────────────────────────────────────────
+// Backed by GET /graph/search, which ranks across every symbol in the graph.
+// This used to filter a client-side array built from stats.top_called and
+// stats.top_callers -- at most ten symbols -- so almost nothing was findable.
+const sEl=$('search'),sRes=$('search-results');
+const SEARCH_LIMIT=10, SEARCH_DEBOUNCE_MS=120;
+let searchHits=[], searchActive=-1, searchTimer=null, searchSeq=0, searchQuery='', searchPending=null;
+
+function closeSearch(){sRes.classList.remove('visible');searchHits=[];searchActive=-1}
+
+function searchItemHTML(hit,i){
+  const k=tk(hit.type);
+  return '<div class="search-item'+(i===searchActive?' active':'')+'" data-idx="'+i+'" data-nav="'+escH(hit.qualified_name)+'">'+
+    '<div class="si-row">'+
+      '<span class="si-kind ti-'+k+'">'+escH(tl(hit.type))+'</span>'+
+      '<span class="si-name">'+escH(hit.name)+'</span>'+
+      '<span class="si-mod" title="'+escH(hit.qualified_name)+'">'+escH(hit.module||'')+'</span>'+
+    '</div></div>';
+}
+
+function renderSearch(){
+  if(!searchHits.length){
+    sRes.innerHTML='<div class="search-item" style="color:var(--text3);cursor:default">No matching symbols</div>';
+    sRes.classList.add('visible');return;
+  }
+  sRes.innerHTML=searchHits.map(searchItemHTML).join('')+
+    '<div class="si-hint"><span>&uarr;&darr; navigate &middot; &crarr; open</span><span>'+searchHits.length+' shown</span></div>';
+  sRes.querySelectorAll('[data-nav]').forEach(el=>{
+    el.addEventListener('click',()=>{sEl.value='';closeSearch();navTo(el.dataset.nav)});
+    el.addEventListener('mousemove',()=>{
+      const i=parseInt(el.dataset.idx,10);
+      if(i!==searchActive){searchActive=i;highlightSearch()}
+    });
+  });
+  sRes.classList.add('visible');
+}
+
+// Move the highlight without re-rendering, so the list cannot shift under the
+// cursor while the user is arrowing through it.
+function highlightSearch(){
+  sRes.querySelectorAll('.search-item[data-idx]').forEach(el=>{
+    el.classList.toggle('active',parseInt(el.dataset.idx,10)===searchActive);
+  });
+  const active=sRes.querySelector('.search-item.active');
+  if(active&&active.scrollIntoView) active.scrollIntoView({block:'nearest'});
+}
+
+async function runSearch(q){
+  // Each request carries a sequence number and late replies are dropped, so
+  // a slow response for an old prefix can never overwrite newer results.
+  const seq=++searchSeq;
+  searchQuery=q;
+  try{
+    const d=await apiFetch('/graph/search?q='+encodeURIComponent(q)+'&limit='+SEARCH_LIMIT);
+    if(seq!==searchSeq) return;
+    searchHits=d.results||[];
+    searchActive=searchHits.length?0:-1;
+    renderSearch();
+    return searchHits;
+  }catch(e){
+    if(seq!==searchSeq) return;
+    searchHits=[];searchActive=-1;
+    sRes.innerHTML='<div class="search-item" style="color:var(--red);cursor:default">'+escH(e.message)+'</div>';
+    sRes.classList.add('visible');
+    return [];
+  }
+}
+
+sEl.addEventListener('input',()=>{
+  const q=sEl.value.trim();
+  clearTimeout(searchTimer);
+  if(!q){closeSearch();return}
+  searchTimer=setTimeout(()=>{searchPending=runSearch(q)},SEARCH_DEBOUNCE_MS);
+});
+
+sEl.addEventListener('keydown',async e=>{
+  const open=sRes.classList.contains('visible')&&searchHits.length>0;
+  if(e.key==='ArrowDown'&&open){e.preventDefault();searchActive=(searchActive+1)%searchHits.length;highlightSearch();return}
+  if(e.key==='ArrowUp'&&open){e.preventDefault();searchActive=(searchActive-1+searchHits.length)%searchHits.length;highlightSearch();return}
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const q=sEl.value.trim();
+    clearTimeout(searchTimer);
+
+    if(q && (!open || searchQuery!==q)) {
+      searchPending=runSearch(q);
+      await searchPending;
+    } else if(searchPending) {
+      await searchPending;
+    }
+
+    const hasHits=sRes.classList.contains('visible')&&searchHits.length>0;
+    // Prefer the highlighted search hit. Fall back only for full qualified names.
+    const target=hasHits&&searchActive>=0
+      ?searchHits[searchActive].qualified_name
+      :q.includes('.')?q:'';
+    if(target){sEl.value='';closeSearch();navTo(target)}
+    return;
+  }
+  if(e.key==='Escape'){closeSearch();sEl.blur()}
+});
+
+// "/" focuses search from anywhere, as long as we are not already typing.
+document.addEventListener('keydown',e=>{
+  if(e.key==='/'&&document.activeElement!==sEl&&!/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){
+    e.preventDefault();sEl.focus();sEl.select();
+  }
+});
+
+document.addEventListener('click',e=>{if(!$('search-wrap').contains(e.target)) closeSearch()});
+
+// ── Global nav ───────────────────────────────────────────────────
+$('home-btn').addEventListener('click',()=>{navHist=[];showHome()});
+$('project-pill').addEventListener('click',openScanModal);
+$('open-scan-btn').addEventListener('click',openScanModal);
+$('modal-close-btn').addEventListener('click',closeScanModal);
+$('modal-cancel-btn').addEventListener('click',closeScanModal);
+$('modal-overlay').addEventListener('click',e=>{if(e.target===$('modal-overlay')) closeScanModal()});
+
+// ── Scan Modal ───────────────────────────────────────────────────
+let browserPath = '';
+
+function openScanModal() {
+  $('modal-overlay').classList.add('open');
+  $('scan-progress').style.display='none';
+  $('do-scan-btn').disabled=!selectedPath;
+  browseTo('');  // start at home
+}
+function closeScanModal() {
+  $('modal-overlay').classList.remove('open');
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null}
+}
+
+async function browseTo(path) {
+  $('browser-pane').innerHTML='<div class="centered" style="padding:30px"><div class="loading-ring"></div><p>Loading&hellip;</p></div>';
+  try {
+    const url = '/graph/browse'+(path?'?path='+encodeURIComponent(path):'');
+    const data = await apiFetch(url);
+    browserPath = data.current;
+    $('path-input').value = data.current;
+    renderBrowser(data);
+  } catch(e) {
+    $('browser-pane').innerHTML='<div class="err-box" style="margin:16px">'+escH(e.message)+'</div>';
+  }
+}
+
+function renderBrowser(data) {
+  let html = '';
+  if(data.parent) {
+    html += '<div class="browser-up" id="browser-up"><span class="br-icon">&#x2191;</span><span class="br-name">..</span></div>';
+  } else {
+    // No parent means we are sitting on the edge of ALLOWED_ROOTS. Say so,
+    // rather than just omitting ".." and leaving the user wondering why they
+    // cannot go up.
+    const roots=(data.allowed_roots||[]).join(', ');
+    html += '<div class="browser-up" style="cursor:default;opacity:.65" title="'+escH(roots)+'">' +
+      '<span class="br-icon">&#128274;</span>' +
+      '<span class="br-name">Top of allowed scope &mdash; widen ALLOWED_ROOTS in backend/.env to go higher</span></div>';
+  }
+  const dirs = data.entries.filter(e=>e.is_dir);
+  const files = data.entries.filter(e=>!e.is_dir);
+  [...dirs,...files].forEach(e=>{
+    const isSel = e.path === selectedPath;
+    const icon = e.is_dir ? '&#128193;' : '&#128196;';
+    html += '<div class="browser-row'+(isSel?' selected':'')+'" data-path="'+escH(e.path)+'" data-isdir="'+(e.is_dir?'1':'0')+'">' +
+      '<span class="br-icon">'+icon+'</span>' +
+      '<span class="br-name" title="'+escH(e.path)+'">'+escH(e.name)+'</span>' +
+      (isSel?'<span class="br-sel-tick">&#10003;</span>':'') +
+    '</div>';
+  });
+  if(!html) html='<div class="rel-empty">Empty directory</div>';
+
+  const roots=data.allowed_roots||[];
+  if(roots.length>1){
+    html = roots.map(r=>'<div class="browser-row" data-root="'+escH(r)+'" data-isdir="1">' +
+      '<span class="br-icon">&#127968;</span><span class="br-name" title="'+escH(r)+'">'+escH(r)+'</span></div>').join('') + html;
+  }
+
+  $('browser-pane').innerHTML=html;
+
+  $('browser-pane').querySelectorAll('[data-root]').forEach(row=>{
+    row.addEventListener('click',()=>browseTo(row.dataset.root));
+  });
+  $('browser-up') && data.parent && $('browser-up').addEventListener('click',()=>browseTo(data.parent));
+  $('browser-pane').querySelectorAll('.browser-row').forEach(row=>{
+    row.addEventListener('click',()=>{
+      const p=row.dataset.path, isDir=row.dataset.isdir==='1';
+      if(isDir) {
+        // single-click: navigate into; also select it
+        selectPath(p);
+        browseTo(p);
+      } else {
+        selectPath(p);
+      }
+    });
+    // Double-click on dir to navigate without selecting
+    row.addEventListener('dblclick',()=>{
+      if(row.dataset.isdir==='1') browseTo(row.dataset.path);
+    });
+  });
+}
+
+function selectPath(p) {
+  selectedPath = p;
+  $('selected-path-label').textContent = p || 'No directory selected';
+  $('do-scan-btn').disabled = !p;
+  $('path-input').value = p;
+}
+
+$('browse-go-btn').addEventListener('click',()=>{
+  const p=$('path-input').value.trim();
+  if(p){selectPath(p);browseTo(p);}
+});
+$('path-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const p=$('path-input').value.trim();if(p){selectPath(p);browseTo(p);}}
+});
+
+// Trigger scan
+$('do-scan-btn').addEventListener('click',()=>startScan(selectedPath));
+
+async function startScan(path) {
+  if(!path) return;
+  $('scan-progress').style.display='block';
+  $('do-scan-btn').disabled=true;
+  $('modal-cancel-btn').disabled=true;
+  $('modal-close-btn').disabled=true;
+  $('prog-fill').className='progress-fill';
+  $('prog-label').textContent='Starting scan\u2026';
+
+  try {
+    const job = await apiFetch('/graph/scan', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({path})
+    });
+    scanJobId = job.job_id;
+    pollTimer = setInterval(()=>pollScan(path), 800);
+  } catch(e) {
+    showScanError(e.message);
+  }
+}
+
+async function pollScan(path) {
+  if(!scanJobId) return;
+  try {
+    const job = await apiFetch('/graph/scan/'+scanJobId);
+    $('prog-label').textContent = job.message;
+    if(job.status==='done') {
+      clearInterval(pollTimer); pollTimer=null;
+      $('prog-fill').className='progress-fill done';
+      setTimeout(()=>{
+        closeScanModal();
+        navHist=[];
+        onStatsLoaded(job.stats);
+        showView('home');
+      }, 800);
+    } else if(job.status==='error') {
+      clearInterval(pollTimer); pollTimer=null;
+      showScanError(job.message);
+    }
+  } catch(e) { /* network hiccup, keep polling */ }
+}
+
+function showScanError(msg) {
+  $('prog-fill').className='progress-fill error';
+  $('prog-ring').style.display='none';
+  $('prog-label').textContent='Error: '+msg;
+  $('do-scan-btn').disabled=false;
+  $('modal-cancel-btn').disabled=false;
+  $('modal-close-btn').disabled=false;
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+showView('home');
+boot();
+</script>
+</body>
+</html>

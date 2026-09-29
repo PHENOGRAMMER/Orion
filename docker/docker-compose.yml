@@ -1,0 +1,25 @@
+﻿version: "3.9"
+
+services:
+  orion:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist the SQLite database across container restarts
+      - orion-data:/data/orion
+      # Mount a local project for scanning (edit path as needed)
+      # - /home/user/myproject:/workspace/myproject
+    environment:
+      AUTH_ENABLED: "true"
+      DEBUG: "false"
+      # Set ADMIN_API_KEY once, then rotate to a proper key and remove this.
+      # ADMIN_API_KEY: "ob_live_your_bootstrap_key_here"
+      PERSISTENCE_DB: "/data/orion/orion.db"
+      # ALLOWED_ROOTS: "/workspace"
+    restart: unless-stopped
+
+volumes:
+  orion-data:

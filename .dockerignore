@@ -1,0 +1,43 @@
+# Git and local development metadata
+.git
+.gitignore
+.gitattributes
+.copilot-azure
+.agents
+.claude
+.freebuff
+.vscode
+.idea
+
+# Python environments, caches, and test output
+**/.venv
+**/venv
+**/env
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+
+# Local secrets and runtime configuration
+.env
+**/.env
+.streamlit/secrets.toml
+**/.streamlit/secrets.toml
+*.pem
+*.key
+
+# Local databases and generated scan/training artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+graphs
+backend/exports
+scratch
+test_repos
+orion-external-test
+
+# Keep fine_tuned_model available to the Dockerfile intentionally. It is a
+# deployment artifact and must be supplied separately from source control.

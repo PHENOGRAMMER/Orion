@@ -11,7 +11,6 @@ from pathlib import Path
 from app.scanner.index import ProjectIndex
 from app.scanner.models import ProjectScanResult
 
-from .models import ModuleInfo
 from .module_resolver import ModuleResolver
 from .symbol_resolver import SymbolResolver
 
@@ -33,13 +32,17 @@ class ImportResolver:
 
         for file_path, file_symbols in result.symbol_graph.files.items():
 
+            absolute_file = (
+                Path(result.root_path) / file_path
+            ).resolve()
+
             module = self._module_name(
-                Path(file_path),
+                absolute_file,
                 index,
+                result,
             )
 
             if module is None:
-                print(f"[WARN] No module found for: {file_path}")
                 continue
 
             for import_symbol in file_symbols.imports:
@@ -59,33 +62,41 @@ class ImportResolver:
 
     def _module_name(
         self,
-        file_path: Path,
-        index: ProjectIndex,
-    ) -> ModuleInfo | None:
+        file_path,
+        index,
+        result,
+    ):
         """
-        Convert a file path back into ModuleInfo.
+        Returns the ModuleInfo corresponding to a file path.
         """
 
-        # Normalize the incoming path.
-        try:
-            file_path = file_path.resolve(strict=False)
-        except Exception:
-            file_path = Path(file_path)
+        file_path = Path(file_path)
 
-        for module in index.module_index.values():
+        # Fast path: ProjectIndexBuilder records this mapping while building
+        # the module index. The old implementation scanned every module for
+        # every file, which becomes prohibitively expensive on large repos.
+        direct = index.module_by_path.get(str(file_path.resolve()).lower())
+        if direct is not None:
+            return direct
 
-            module_path = module.path
+        for module_name, module in index.module_index.items():
 
-            try:
-                module_path = module_path.resolve(strict=False)
-            except Exception:
-                pass
+            module_path = Path(module.path)
 
-            if module_path == file_path:
+            file_resolved = file_path
+            module_resolved = module_path
+
+            # Exact match
+            if module_resolved == file_resolved:
                 return module
 
-            # Fallback for relative/absolute path mismatches.
-            if module.path.as_posix().endswith(file_path.as_posix()):
+            # Relative suffix match
+            if module_resolved.as_posix().endswith(
+                file_resolved.as_posix()
+            ):
                 return module
 
+            # Fallback substring match
+            if file_resolved.as_posix() in module_resolved.as_posix():
+                return module
         return None

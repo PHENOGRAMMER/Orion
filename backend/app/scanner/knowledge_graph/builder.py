@@ -4,13 +4,14 @@ Knowledge Graph Builder.
 Builds a project knowledge graph from a ProjectScanResult.
 """
 
+
 from __future__ import annotations
 
-from app.scanner.knowledge_graph import graph
 from pathlib import Path
 
 from app.scanner.index import ProjectIndex
 from app.scanner.models import ProjectScanResult
+from app.scanner.call_graph.models import ResolvedCall
 
 from .graph import KnowledgeGraph
 from .models import (
@@ -30,6 +31,7 @@ class KnowledgeGraphBuilder:
         self,
         result: ProjectScanResult,
         index: ProjectIndex,
+        resolved_calls: list[ResolvedCall] | None = None,
     ) -> KnowledgeGraph:
 
         graph = KnowledgeGraph()
@@ -42,6 +44,8 @@ class KnowledgeGraphBuilder:
             module.path.resolve(): module
             for module in index.module_index.values()
         }
+
+        root_path = Path(result.root_path).resolve()
 
         #
         # Files
@@ -58,12 +62,6 @@ class KnowledgeGraphBuilder:
 
             graph.add_node(node)
 
-
-        print("\n===== FILE NODES =====")
-        for node_id in graph.nodes:
-            if node_id.startswith("file:"):
-                print(node_id)
-
         #
         # Modules
         #
@@ -75,51 +73,45 @@ class KnowledgeGraphBuilder:
                 type=NodeType.MODULE,
                 name=module.name,
                 qualified_name=module.name,
+                module=module.name,
                 path=module.path,
             )
 
             graph.add_node(module_node)
 
             #
-            # File -> Module
+            # File -> Module edge
             #
 
-            relative_path = module.path.relative_to(
-                Path(result.root_path).resolve()
-            )
+            try:
+                relative_path = module.path.relative_to(root_path)
+                file_id = f"file:{relative_path.as_posix()}"
 
-            file_id = f"file:{relative_path.as_posix()}"
-
-            if graph.has_node(file_id):
-
-                graph.add_edge(
-                    GraphEdge(
-                        source=file_id,
-                        target=module_node.id,
-                        type=EdgeType.DECLARES,
+                if graph.has_node(file_id):
+                    graph.add_edge(
+                        GraphEdge(
+                            source=file_id,
+                            target=module_node.id,
+                            type=EdgeType.DECLARES,
+                        )
                     )
-                )
+            except ValueError:
+                pass
 
         #
         # Symbols
         #
 
         symbol_type_map = {
-            "class": NodeType.CLASS,
+            "class":    NodeType.CLASS,
             "function": NodeType.FUNCTION,
-            "method": NodeType.METHOD,
+            "method":   NodeType.METHOD,
             "variable": NodeType.VARIABLE,
         }
 
         for symbol in index.symbol_index.qualified_symbols.values():
 
-            #
-            # Skip unknown symbols.
-            #
-
-            node_type = symbol_type_map.get(
-                symbol.symbol_type.lower()
-            )
+            node_type = symbol_type_map.get(symbol.symbol_type.lower())
 
             if node_type is None:
                 continue
@@ -129,16 +121,21 @@ class KnowledgeGraphBuilder:
                 type=node_type,
                 name=symbol.name,
                 qualified_name=symbol.qualified_name,
+                module=symbol.module,
                 path=symbol.path,
                 line=symbol.line,
+                end_line=symbol.end_line
             )
 
             graph.add_node(symbol_node)
 
+            #
+            # Module -> Symbol edge
+            #
+
             module_id = f"module:{symbol.module}"
 
             if graph.has_node(module_id):
-
                 graph.add_edge(
                     GraphEdge(
                         source=module_id,
@@ -148,7 +145,7 @@ class KnowledgeGraphBuilder:
                 )
 
         #
-        # Imports
+        # File-level import edges
         #
 
         for file_path, file_symbols in result.symbol_graph.files.items():
@@ -160,16 +157,8 @@ class KnowledgeGraphBuilder:
 
             for imp in file_symbols.imports:
 
-                print("\nSOURCE :", source_file)
-                print("RESOLVED FILE :", imp.resolved_file)
-
                 if imp.resolved_file is None:
                     continue
-
-                target = f"file:{imp.resolved_file}"
-
-                print("TARGET :", target)
-                print("TARGET EXISTS :", graph.has_node(target))
 
                 target = f"file:{imp.resolved_file}"
 
@@ -185,7 +174,7 @@ class KnowledgeGraphBuilder:
                 )
 
         #
-        # Module imports
+        # Module-level import edges
         #
 
         for file_symbols in result.symbol_graph.files.values():
@@ -201,34 +190,58 @@ class KnowledgeGraphBuilder:
 
             for imp in file_symbols.imports:
 
-                resolved_module = getattr(
-                    imp,
-                    "resolved_module",
-                    None,
-                )
+                #
+                # Prefer the resolver's answer, then fall back to the raw
+                # import name — that still connects a plain "import a.b.c"
+                # of a first-party module the resolver did not annotate.
+                #
+                # Whichever lands first wins; the old version of this loop
+                # fell through to a "module:None" lookup that could never
+                # match, so the fallback was effectively dead code.
+                #
+                for candidate in (getattr(imp, "resolved_module", None), imp.module):
 
-                if resolved_module is None:
-                    continue
+                    if not candidate:
+                        continue
 
-                target_id = f"module:{resolved_module}"
+                    target_id = f"module:{candidate}"
 
-                if not graph.has_node(target_id):
-                    continue
+                    if graph.has_node(target_id):
+                        graph.add_edge(
+                            GraphEdge(
+                                source=source_id,
+                                target=target_id,
+                                type=EdgeType.IMPORTS,
+                            )
+                        )
+                        break
 
+        #
+        # Call edges
+        #
+        # Each ResolvedCall carries a caller_symbol and callee_symbol that are
+        # fully-qualified project symbol names, e.g.:
+        #
+        #   app.scanner.scanner.ProjectScanner.scan
+        #   app.scanner.symbol_index_builder.SymbolIndexBuilder.build
+        #
+
+        for call in (resolved_calls or []):
+
+            source_id = f"symbol:{call.caller_symbol}"
+            target_id = f"symbol:{call.callee_symbol}"
+
+            if graph.has_node(source_id) and graph.has_node(target_id):
                 graph.add_edge(
                     GraphEdge(
                         source=source_id,
                         target=target_id,
-                        type=EdgeType.IMPORTS,
+                        type=EdgeType.CALLS,
+                        metadata={
+                            "file": str(call.file),
+                            "line": str(call.line),
+                        },
                     )
                 )
-
-        count = sum(
-            1
-            for edge in graph.edges
-            if edge.type == EdgeType.IMPORTS
-        )
-
-        print(f"IMPORT EDGES: {count}")
 
         return graph

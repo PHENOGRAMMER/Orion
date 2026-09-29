@@ -44,6 +44,7 @@ import re
 import time
 import logging
 import json
+import httpx
 from functools import lru_cache
 from threading import Thread
 from typing import Any, Iterator
@@ -72,6 +73,8 @@ ADAPTER_PATH   = os.getenv("ORION_ADAPTER_PATH", "../fine_tuned_model")
 MAX_NEW_TOKENS = int(os.getenv("ORION_MAX_TOKENS", "65"))
 TEMPERATURE    = 0.05
 LLM_ENABLED    = settings.ORION_LLM_ENABLED
+MODEL_SERVICE_URL = os.getenv("ORION_MODEL_SERVICE_URL", "").rstrip("/")
+MODEL_SERVICE_TOKEN = os.getenv("ORION_MODEL_SERVICE_TOKEN", "")
 
 # ── STEP 2: ftfy import (graceful fallback if not installed) ──────────────────
 # Install with:  pip install ftfy
@@ -677,6 +680,22 @@ def _is_acceptable(answer: str, symbol: str) -> bool:
 # ── STEP 4: _generate() — token count logging ────────────────────────────────
 
 def _generate(question: str, context: str) -> str:
+    if MODEL_SERVICE_URL:
+        headers = {"Authorization": f"Bearer {MODEL_SERVICE_TOKEN}"} if MODEL_SERVICE_TOKEN else {}
+        response = httpx.post(
+            f"{MODEL_SERVICE_URL}/generate",
+            json={
+                "question": question,
+                "context": context,
+                "max_new_tokens": MAX_NEW_TOKENS,
+                "temperature": TEMPERATURE,
+            },
+            headers=headers,
+            timeout=240,
+        )
+        response.raise_for_status()
+        return _clean(response.json().get("text", ""))
+
     model, tokenizer, stop_ids, device, _ = _load_model()
     prompt = _build_prompt(question, context, tokenizer)
     enc    = tokenizer(
@@ -718,6 +737,10 @@ def _generate(question: str, context: str) -> str:
 # ── STEP 8: _generate_stream() — buffered clean & stream suppression ─────────
 
 def _generate_stream(question: str, context: str, focal_symbol: str = "") -> Iterator[str]:
+    if MODEL_SERVICE_URL:
+        yield _generate(question, context)
+        return
+
     from transformers import TextIteratorStreamer
 
     model, tokenizer, stop_ids, device, _ = _load_model()
@@ -852,7 +875,7 @@ async def ask(req: AskRequest, request: Request, _user: CurrentUser = None):
             device = "graph"
         else:
             raw_answer = _generate(req.question, context)
-            _, _, _, device, _ = _load_model()
+            device = "remote" if MODEL_SERVICE_URL else _load_model()[3]
 
             # STEP 7: quality gate
             if _is_acceptable(raw_answer, req.focal_symbol):
@@ -923,6 +946,7 @@ async def health(request: Request, _user: CurrentUser = None):
     info: dict[str, Any] = {
         "model_loaded":   cache_info.currsize > 0,
         "enabled":        LLM_ENABLED,
+        "mode":            "remote" if MODEL_SERVICE_URL else "local",
         "device":         "cuda" if cuda else "cpu",
         "cuda_available": cuda,
         "max_new_tokens": MAX_NEW_TOKENS,
@@ -939,7 +963,10 @@ async def health(request: Request, _user: CurrentUser = None):
             else f"WARNING — low IDs detected: {[i for i in stop_ids if i < 100]} — restart uvicorn"
         )
 
-    if cuda and torch is not None:
+    if MODEL_SERVICE_URL:
+        info["device"] = "remote"
+        info["model_service_url_configured"] = True
+    elif cuda and torch is not None:
         info["vram"] = [
             {
                 "gpu":      i,
